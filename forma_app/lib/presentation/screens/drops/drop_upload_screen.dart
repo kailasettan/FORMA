@@ -32,9 +32,6 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
 
   bool _isValidatingVideo = false;
   String? _videoValidationError;
-  double _videoDurationSeconds = 0;
-  int? _videoWidth;
-  int? _videoHeight;
 
   @override
   void initState() {
@@ -102,9 +99,6 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
       setState(() {
         _videoFile = videoFile;
         _videoPlayerController = controller;
-        _videoDurationSeconds = duration;
-        _videoWidth = controller.value.size.width.toInt();
-        _videoHeight = controller.value.size.height.toInt();
         _isValidatingVideo = false;
         
         // Autoplay/loop preview
@@ -288,7 +282,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
 
                         // Sport Selector Dropdown
                         DropdownButtonFormField<String>(
-                          value: _selectedSportId,
+                          initialValue: _selectedSportId,
                           decoration: const InputDecoration(
                             labelText: 'Associated Sport',
                             prefixIcon: Icon(Icons.sports_rounded),
@@ -316,7 +310,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
 
                         // Category Selector Dropdown (Dynamically enabled/filled)
                         DropdownButtonFormField<String>(
-                          value: _selectedCategoryId,
+                          initialValue: _selectedCategoryId,
                           decoration: InputDecoration(
                             labelText: activeCategories.isEmpty
                                 ? 'No Categories for this Sport'
@@ -339,7 +333,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
 
                         // Visibility dropdown
                         DropdownButtonFormField<String>(
-                          value: _selectedVisibility,
+                          initialValue: _selectedVisibility,
                           decoration: const InputDecoration(
                             labelText: 'Visibility',
                             prefixIcon: Icon(Icons.visibility_rounded),

@@ -4,7 +4,6 @@ import '../../../domain/entities/user.dart';
 import '../../../domain/entities/sport.dart';
 import '../../../domain/repositories/profile_repository.dart';
 import '../../cubits/auth_cubit.dart';
-import '../../cubits/profile_cubit.dart';
 import '../../cubits/catalog_cubit.dart';
 import '../../theme.dart';
 
@@ -193,7 +192,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                     // Availability Status Dropdown
                     DropdownButtonFormField<String>(
-                      value: _selectedAvailability,
+                      initialValue: _selectedAvailability,
                       decoration: const InputDecoration(
                         labelText: 'Availability Status',
                         prefixIcon: Icon(Icons.event_available_rounded),
@@ -211,7 +210,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                     // Focused Sport Dropdown
                     DropdownButtonFormField<String>(
-                      value: _selectedFocusedSportId,
+                      initialValue: _selectedFocusedSportId,
                       decoration: const InputDecoration(
                         labelText: 'Focused Sport',
                         prefixIcon: Icon(Icons.star_rounded),

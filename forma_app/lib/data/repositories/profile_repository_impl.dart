@@ -35,7 +35,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
       '/player-profiles',
       body: {
         'sport_id': sportId,
-        if (roleOrDiscipline != null) 'role_or_discipline': roleOrDiscipline,
+        'role_or_discipline': ?roleOrDiscipline,
         'skill_level': skillLevel,
       },
     );
@@ -51,8 +51,8 @@ class ProfileRepositoryImpl implements ProfileRepository {
     final response = await _apiClient.patch(
       '/player-profiles/$profileId',
       body: {
-        if (roleOrDiscipline != null) 'role_or_discipline': roleOrDiscipline,
-        if (skillLevel != null) 'skill_level': skillLevel,
+        'role_or_discipline': ?roleOrDiscipline,
+        'skill_level': ?skillLevel,
       },
     );
     return PlayerProfileModel.fromJson(response as Map<String, dynamic>);
@@ -73,17 +73,16 @@ class ProfileRepositoryImpl implements ProfileRepository {
     String? focusedSportId,
   }) async {
     final body = {
-      if (username != null) 'username': username,
-      if (fullName != null) 'full_name': fullName,
-      if (age != null) 'age': age,
-      if (city != null) 'city': city,
-      if (profilePhotoUrl != null) 'profile_photo_url': profilePhotoUrl,
-      if (headline != null) 'headline': headline,
-      if (bio != null) 'bio': bio,
-      if (location != null) 'location': location,
-      if (availability != null) 'availability': availability,
-      if (preferredOpportunityTypes != null)
-        'preferred_opportunity_types': preferredOpportunityTypes,
+      'username': ?username,
+      'full_name': ?fullName,
+      'age': ?age,
+      'city': ?city,
+      'profile_photo_url': ?profilePhotoUrl,
+      'headline': ?headline,
+      'bio': ?bio,
+      'location': ?location,
+      'availability': ?availability,
+      'preferred_opportunity_types': ?preferredOpportunityTypes,
       'focused_sport_id': focusedSportId, // always set (can be null)
     };
     final response = await _apiClient.patch('/users/me', body: body);

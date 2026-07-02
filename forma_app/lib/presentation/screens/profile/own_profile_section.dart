@@ -3,10 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/entities/drop.dart';
 import '../../../domain/entities/player_profile.dart';
-import '../../cubits/auth_cubit.dart';
 import '../../cubits/profile_cubit.dart';
 import '../../cubits/drop_cubit.dart';
-import '../../cubits/public_profile_cubit.dart';
 import '../../theme.dart';
 import '../drops/drop_viewer_screen.dart';
 import '../drops/drop_upload_screen.dart';
@@ -465,7 +463,7 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                         ? Image.network(
                                             drop.thumbnailUrl!,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => Container(
+                                            errorBuilder: (ctx, err, stack) => Container(
                                               color: Colors.white12,
                                               child: const Icon(Icons.video_library_rounded),
                                             ),

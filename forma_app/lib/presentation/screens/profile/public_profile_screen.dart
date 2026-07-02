@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../domain/entities/drop.dart';
 import '../../cubits/auth_cubit.dart';
 import '../../cubits/public_profile_cubit.dart';
 import '../../cubits/scout_shortlist_cubit.dart';
@@ -392,7 +391,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                         ? Image.network(
                                             drop.thumbnailUrl!,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => Container(
+                                            errorBuilder: (ctx, err, stack) => Container(
                                               color: Colors.white12,
                                               child: const Icon(Icons.video_library_rounded, size: 32),
                                             ),

@@ -137,9 +137,14 @@ def create_drop(
             )
 
     # 4. Verify Cloudinary metadata securely from backend
-    # Skip real remote call ONLY if secrets are unset (mocking during dev) AND testing environment is detected
-    is_testing = settings.cloudinary_api_secret in ["", "change-me-in-production"] or settings.database_url.endswith("test")
+    is_testing = settings.database_url.endswith("test")
     
+    if not is_testing and settings.cloudinary_api_secret in ["", "change-me-in-production"]:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Cloudinary credentials are not configured on the server",
+        )
+
     if is_testing:
         # In test mode, we do local schema validations of payload duration & size
         if payload.duration_seconds > 60.0:

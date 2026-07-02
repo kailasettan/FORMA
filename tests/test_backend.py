@@ -11,6 +11,8 @@ from app.security import hash_password
 
 # Testing database URL
 TEST_DATABASE_URL = "postgresql+psycopg://localhost:5432/forma_test"
+from app.config import settings
+settings.database_url = TEST_DATABASE_URL
 
 engine = create_engine(TEST_DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

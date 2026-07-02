@@ -147,7 +147,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       },
                     ),
                     DropdownButtonFormField<String>(
-                      value: _selectedRole,
+                      initialValue: _selectedRole,
                       decoration: const InputDecoration(
                         labelText: 'I want to join as',
                         prefixIcon: Icon(Icons.people_outline),

@@ -179,7 +179,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                           )
                         else
                           DropdownButtonFormField<String>(
-                            value: _selectedSportId,
+                            initialValue: _selectedSportId,
                             decoration: const InputDecoration(
                               labelText: 'Sport',
                               prefixIcon: Icon(Icons.sports_rounded),
@@ -201,7 +201,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                                   },
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Please select a sport';
+                                  return 'Please select a sport';
                               }
                               return null;
                             },
@@ -221,7 +221,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
 
                         // Skill Level Dropdown
                         DropdownButtonFormField<String>(
-                          value: _selectedSkillLevel,
+                          initialValue: _selectedSkillLevel,
                           decoration: const InputDecoration(
                             labelText: 'Skill Level',
                             prefixIcon: Icon(Icons.star_outline),

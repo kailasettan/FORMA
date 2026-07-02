@@ -81,7 +81,7 @@ class DropUploadCubit extends Cubit<DropUploadState> {
       final bytes = cloudinaryResponse['bytes'] as int;
 
       // Extract Cloudinary image thumbnail
-      final String? thumbnailUrl = playbackUrl.replaceAll(
+      final String thumbnailUrl = playbackUrl.replaceAll(
         RegExp(r'\.(mp4|mov|webm)$'),
         '.jpg',
       );

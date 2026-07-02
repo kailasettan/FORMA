@@ -152,14 +152,14 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                             },
                           ),
                           onTap: () {
+                            final scoutCubit = context.read<ScoutShortlistCubit>();
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => PublicProfileScreen(userId: athlete.id),
                               ),
                             ).then((_) {
-                              // Reload on back in case they updated bookmark status
-                              context.read<ScoutShortlistCubit>().loadShortlist();
+                              scoutCubit.loadShortlist();
                             });
                           },
                         ),
