@@ -28,6 +28,7 @@ def signup(payload: SignUpIn, db: Session = Depends(get_db)) -> AuthOut:
         email=payload.email,
         password_hash=hash_password(payload.password),
         full_name=payload.full_name,
+        role=payload.role,
     )
     db.add(user)
     try:

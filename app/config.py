@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7
 
+    # Cloudinary Config
+    cloudinary_cloud_name: str = "nyuzzi3x"
+    cloudinary_api_key: str = Field(default="", validation_alias=AliasChoices("CLOUDINARY_API_KEY"))
+    cloudinary_api_secret: str = Field(default="", validation_alias=AliasChoices("CLOUDINARY_API_SECRET"))
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

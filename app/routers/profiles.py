@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import PlayerProfile, User
+from app.models import PlayerProfile, User, SportCatalog
 from app.schemas import PlayerProfileCreateIn, PlayerProfileOut, PlayerProfileUpdateIn
 
 router = APIRouter(prefix="/player-profiles", tags=["player profiles"])
@@ -19,10 +19,18 @@ def create_player_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PlayerProfile:
+    # Check if sport exists
+    sport = db.get(SportCatalog, payload.sport_id)
+    if not sport:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sport not found",
+        )
+
     profile = PlayerProfile(
         user_id=current_user.id,
-        sport=payload.sport,
-        position=payload.position,
+        sport_id=payload.sport_id,
+        role_or_discipline=payload.role_or_discipline,
         skill_level=payload.skill_level,
     )
     db.add(profile)
@@ -35,6 +43,8 @@ def create_player_profile(
             detail="Player profile already exists for this sport",
         ) from None
     db.refresh(profile)
+    # Populate the sport relation
+    profile.sport = sport
     return profile
 
 
@@ -58,4 +68,5 @@ def update_player_profile(
         setattr(profile, field, value)
     db.commit()
     db.refresh(profile)
+    profile.sport = db.get(SportCatalog, profile.sport_id)
     return profile
