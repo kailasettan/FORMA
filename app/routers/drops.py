@@ -6,24 +6,95 @@ import urllib.error
 import urllib.request
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Drop, DropComment, DropProp, PlayerProfile, SportCatalog, SportCategory, User
+from app.models import (
+    Drop,
+    DropComment,
+    DropProp,
+    OrphanedCloudinaryAsset,
+    PlayerProfile,
+    SportCatalog,
+    SportCategory,
+    User,
+)
 from app.schemas import (
     DropCommentCreateIn,
     DropCommentOut,
     DropCreateIn,
+    DropFeedOut,
     DropOut,
     UploadSignatureOut,
 )
 
 router = APIRouter(prefix="/drops", tags=["drops"])
+
+
+MAX_FEED_LIMIT = 25
+
+
+def hydrate_drop(drop: Drop, db: Session, current_user: User | None = None) -> Drop:
+    drop.user = db.get(User, drop.user_id)
+    drop.sport = db.get(SportCatalog, drop.sport_id)
+    if drop.category_id:
+        drop.category = db.get(SportCategory, drop.category_id)
+    drop.props_count = db.scalar(select(func.count(DropProp.id)).where(DropProp.drop_id == drop.id)) or 0
+    drop.comments_count = db.scalar(
+        select(func.count(DropComment.id)).where(
+            (DropComment.drop_id == drop.id) & (DropComment.deleted_at == None)
+        )
+    ) or 0
+    drop.has_propped = False
+    if current_user is not None:
+        drop.has_propped = (
+            db.scalar(
+                select(DropProp).where(
+                    (DropProp.drop_id == drop.id) & (DropProp.user_id == current_user.id)
+                )
+            )
+            is not None
+        )
+    return drop
+
+
+def visible_drop_query():
+    return select(Drop).where(
+        Drop.visibility == "public",
+        Drop.moderation_status == "approved",
+    )
+
+
+def record_orphaned_cloudinary_asset(
+    payload: DropCreateIn,
+    current_user: User,
+    db: Session,
+    reason: str,
+) -> None:
+    existing = db.scalar(
+        select(OrphanedCloudinaryAsset).where(
+            OrphanedCloudinaryAsset.provider_asset_id == payload.provider_asset_id
+        )
+    )
+    if existing:
+        return
+    db.add(
+        OrphanedCloudinaryAsset(
+            user_id=current_user.id,
+            provider_asset_id=payload.provider_asset_id,
+            public_id=payload.public_id,
+            reason=reason,
+        )
+    )
+    try:
+        db.commit()
+    except (IntegrityError, SQLAlchemyError):
+        db.rollback()
 
 
 def generate_cloudinary_signature(api_secret: str, params: dict) -> str:
@@ -114,9 +185,18 @@ def create_drop(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Drop:
-    # 1. Check if public_id already exists in db to reject duplicates early
-    existing_drop = db.scalar(select(Drop).where(Drop.public_id == payload.public_id))
+    # 1. Check if this Cloudinary asset was already published.
+    existing_drop = db.scalar(
+        select(Drop).where(
+            or_(
+                Drop.provider_asset_id == payload.provider_asset_id,
+                Drop.public_id == payload.public_id,
+            )
+        )
+    )
     if existing_drop:
+        if existing_drop.user_id == current_user.id:
+            return hydrate_drop(existing_drop, db, current_user)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Drop with this provider asset already exists",
@@ -125,12 +205,19 @@ def create_drop(
     # 2. Check if sport exists
     sport = db.get(SportCatalog, payload.sport_id)
     if not sport:
+        record_orphaned_cloudinary_asset(payload, current_user, db, "sport_not_found")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sport not found")
 
     # 3. Check if category exists
     if payload.category_id:
         category = db.get(SportCategory, payload.category_id)
         if not category or category.sport_id != payload.sport_id:
+            record_orphaned_cloudinary_asset(
+                payload,
+                current_user,
+                db,
+                "invalid_sport_category",
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid sport category selection",
@@ -148,16 +235,19 @@ def create_drop(
     if is_testing:
         # In test mode, we do local schema validations of payload duration & size
         if payload.duration_seconds > 60.0:
+            record_orphaned_cloudinary_asset(payload, current_user, db, "duration_limit")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="This video is longer than 60 seconds.",
             )
         if payload.bytes > 50 * 1024 * 1024:
+            record_orphaned_cloudinary_asset(payload, current_user, db, "bytes_limit")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Video size exceeds the 50 MB limit.",
             )
         if payload.format not in ["mp4", "mov", "webm"]:
+            record_orphaned_cloudinary_asset(payload, current_user, db, "unsupported_format")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Unsupported video format.",
@@ -178,48 +268,28 @@ def create_drop(
         bytes_size = int(metadata.get("bytes", 0))
 
         if resource_type != "video":
-            delete_cloudinary_asset(
-                settings.cloudinary_cloud_name,
-                settings.cloudinary_api_key,
-                settings.cloudinary_api_secret,
-                payload.public_id,
-            )
+            record_orphaned_cloudinary_asset(payload, current_user, db, "resource_not_video")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Resource must be a video.",
             )
 
         if asset_format not in ["mp4", "mov", "webm"]:
-            delete_cloudinary_asset(
-                settings.cloudinary_cloud_name,
-                settings.cloudinary_api_key,
-                settings.cloudinary_api_secret,
-                payload.public_id,
-            )
+            record_orphaned_cloudinary_asset(payload, current_user, db, "unsupported_format")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Unsupported video format.",
             )
 
         if duration > 60.0:
-            delete_cloudinary_asset(
-                settings.cloudinary_cloud_name,
-                settings.cloudinary_api_key,
-                settings.cloudinary_api_secret,
-                payload.public_id,
-            )
+            record_orphaned_cloudinary_asset(payload, current_user, db, "duration_limit")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="This video is longer than 60 seconds.",
             )
 
         if bytes_size > 50 * 1024 * 1024:
-            delete_cloudinary_asset(
-                settings.cloudinary_cloud_name,
-                settings.cloudinary_api_key,
-                settings.cloudinary_api_secret,
-                payload.public_id,
-            )
+            record_orphaned_cloudinary_asset(payload, current_user, db, "bytes_limit")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Video size exceeds the 50 MB limit.",
@@ -252,9 +322,27 @@ def create_drop(
         format=payload.format,
         bytes=payload.bytes,
         visibility=payload.visibility,
+        moderation_status="approved",
     )
     db.add(drop)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing_drop = db.scalar(
+            select(Drop).where(
+                or_(
+                    Drop.provider_asset_id == payload.provider_asset_id,
+                    Drop.public_id == payload.public_id,
+                )
+            )
+        )
+        if existing_drop and existing_drop.user_id == current_user.id:
+            return hydrate_drop(existing_drop, db, current_user)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Drop with this provider asset already exists",
+        ) from None
     db.refresh(drop)
     
     # Set helper dynamic properties
@@ -262,6 +350,39 @@ def create_drop(
     drop.comments_count = 0
     drop.has_propped = False
     return drop
+
+
+@router.get("/feed", response_model=DropFeedOut)
+def list_feed(
+    cursor: str | None = None,
+    limit: int = Query(default=10, ge=1, le=MAX_FEED_LIMIT),
+    sport_id: UUID | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    stmt = visible_drop_query()
+    if sport_id:
+        stmt = stmt.where(Drop.sport_id == sport_id)
+    if cursor:
+        try:
+            from datetime import datetime
+
+            cursor_dt = datetime.fromisoformat(cursor.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid cursor",
+            ) from None
+        stmt = stmt.where(Drop.created_at < cursor_dt)
+
+    rows = list(db.scalars(stmt.order_by(Drop.created_at.desc()).limit(limit + 1)))
+    has_more = len(rows) > limit
+    drops = rows[:limit]
+    for drop in drops:
+        hydrate_drop(drop, db, current_user)
+
+    next_cursor = drops[-1].created_at if has_more and drops else None
+    return {"items": drops, "next_cursor": next_cursor}
 
 
 @router.get("/{drop_id}", response_model=DropOut)
@@ -281,26 +402,7 @@ def get_drop(
             detail="You do not have permission to view this Drop.",
         )
 
-    # Populate dynamic parameters
-    props_count = db.scalar(select(func.count(DropProp.id)).where(DropProp.drop_id == drop.id))
-    comments_count = db.scalar(
-        select(func.count(DropComment.id)).where(
-            (DropComment.drop_id == drop.id) & (DropComment.deleted_at == None)
-        )
-    )
-    has_propped = (
-        db.scalar(
-            select(DropProp).where(
-                (DropProp.drop_id == drop.id) & (DropProp.user_id == current_user.id)
-            )
-        )
-        is not None
-    )
-
-    drop.props_count = props_count
-    drop.comments_count = comments_count
-    drop.has_propped = has_propped
-    return drop
+    return hydrate_drop(drop, db, current_user)
 
 
 @router.delete("/{drop_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -352,10 +454,10 @@ def give_props(
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You already gave Props to this Drop.",
+            detail="You already added Fire to this Drop.",
         ) from None
         
-    return {"message": "Props added successfully"}
+    return {"message": "Fire added successfully"}
 
 
 @router.delete("/{drop_id}/props", status_code=status.HTTP_204_NO_CONTENT)
@@ -372,7 +474,7 @@ def remove_props(
     if not prop:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Props not found",
+            detail="Fire not found",
         )
 
     db.delete(prop)

@@ -32,6 +32,8 @@ abstract class ProfileRepository {
   });
 
   Future<PublicAthleteProfile> fetchPublicAthleteProfile(String userId);
-  Future<PublicAthleteProfile> fetchPublicAthleteProfileByUsername(String username);
+  Future<PublicAthleteProfile> fetchPublicAthleteProfileByUsername(
+    String username,
+  );
   Future<List<User>> searchAthletes(String query);
 }

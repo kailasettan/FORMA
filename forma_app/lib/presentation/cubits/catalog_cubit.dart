@@ -42,13 +42,13 @@ class CatalogCubit extends Cubit<CatalogState> {
       emit(CatalogLoading());
       final sports = await _catalogRepository.getSports();
       final Map<String, List<SportCategory>> categories = {};
-      
+
       // Load categories for active sports
       for (final sport in sports) {
         final cats = await _catalogRepository.getCategories(sport.id);
         categories[sport.id] = cats;
       }
-      
+
       emit(CatalogLoaded(sports: sports, categories: categories));
     } catch (e) {
       emit(CatalogError(e.toString()));

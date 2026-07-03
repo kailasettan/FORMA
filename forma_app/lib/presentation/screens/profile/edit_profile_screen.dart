@@ -18,14 +18,14 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  
+
   late TextEditingController _fullNameController;
   late TextEditingController _headlineController;
   late TextEditingController _bioController;
   late TextEditingController _locationController;
   late TextEditingController _opportunitiesController;
   late TextEditingController _photoUrlController;
-  
+
   String? _selectedAvailability;
   String? _selectedFocusedSportId;
 
@@ -34,21 +34,29 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     'Open to teams',
     'Open to coaching',
     'Open to competitions',
-    'Not currently available'
+    'Not currently available',
   ];
 
   @override
   void initState() {
     super.initState();
     _fullNameController = TextEditingController(text: widget.user.fullName);
-    _headlineController = TextEditingController(text: widget.user.headline ?? '');
+    _headlineController = TextEditingController(
+      text: widget.user.headline ?? '',
+    );
     _bioController = TextEditingController(text: widget.user.bio ?? '');
-    _locationController = TextEditingController(text: widget.user.location ?? '');
-    _photoUrlController = TextEditingController(text: widget.user.profilePhotoUrl ?? '');
-    
+    _locationController = TextEditingController(
+      text: widget.user.location ?? '',
+    );
+    _photoUrlController = TextEditingController(
+      text: widget.user.profilePhotoUrl ?? '',
+    );
+
     final opportunitiesList = widget.user.preferredOpportunityTypes ?? [];
-    _opportunitiesController = TextEditingController(text: opportunitiesList.join(', '));
-    
+    _opportunitiesController = TextEditingController(
+      text: opportunitiesList.join(', '),
+    );
+
     _selectedAvailability = widget.user.availability;
     _selectedFocusedSportId = widget.user.focusedSportId;
 
@@ -73,19 +81,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (_formKey.currentState!.validate()) {
       final opportunitiesText = _opportunitiesController.text.trim();
       final List<String> opportunities = opportunitiesText.isNotEmpty
-          ? opportunitiesText.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()
+          ? opportunitiesText
+                .split(',')
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList()
           : [];
 
       try {
         final profileRepo = context.read<ProfileRepository>();
         final updatedUser = await profileRepo.updateMe(
           fullName: _fullNameController.text.trim(),
-          headline: _headlineController.text.trim().isNotEmpty ? _headlineController.text.trim() : null,
-          bio: _bioController.text.trim().isNotEmpty ? _bioController.text.trim() : null,
-          location: _locationController.text.trim().isNotEmpty ? _locationController.text.trim() : null,
-          profilePhotoUrl: _photoUrlController.text.trim().isNotEmpty ? _photoUrlController.text.trim() : null,
+          headline: _headlineController.text.trim().isNotEmpty
+              ? _headlineController.text.trim()
+              : null,
+          bio: _bioController.text.trim().isNotEmpty
+              ? _bioController.text.trim()
+              : null,
+          location: _locationController.text.trim().isNotEmpty
+              ? _locationController.text.trim()
+              : null,
+          profilePhotoUrl: _photoUrlController.text.trim().isNotEmpty
+              ? _photoUrlController.text.trim()
+              : null,
           availability: _selectedAvailability,
-          preferredOpportunityTypes: opportunities.isNotEmpty ? opportunities : null,
+          preferredOpportunityTypes: opportunities.isNotEmpty
+              ? opportunities
+              : null,
           focusedSportId: _selectedFocusedSportId,
         );
 
@@ -116,9 +138,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Profile'),
-      ),
+      appBar: AppBar(title: const Text('Edit Profile')),
       body: BlocBuilder<CatalogCubit, CatalogState>(
         builder: (context, catalogState) {
           List<Sport> sports = [];
@@ -216,13 +236,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         prefixIcon: Icon(Icons.star_rounded),
                       ),
                       items: [
-                        const DropdownMenuItem<String>(value: null, child: Text('NONE')),
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('NONE'),
+                        ),
                         ...sports.map((sport) {
                           return DropdownMenuItem<String>(
                             value: sport.id,
                             child: Text(sport.name.toUpperCase()),
                           );
-                        })
+                        }),
                       ],
                       onChanged: (val) {
                         setState(() {

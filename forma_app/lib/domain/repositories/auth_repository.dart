@@ -13,6 +13,8 @@ abstract class AuthRepository {
 
   Future<User?> checkAuth();
 
+  Future<void> healthCheck();
+
   Future<void> logout();
 
   Future<String?> getToken();

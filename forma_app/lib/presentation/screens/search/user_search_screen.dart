@@ -45,9 +45,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Find Athletes'),
-      ),
+      appBar: AppBar(title: const Text('Find Athletes')),
       body: Column(
         children: [
           Padding(
@@ -187,7 +185,9 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: AppTheme.primary.withValues(alpha: 0.1),
+                                    color: AppTheme.primary.withValues(
+                                      alpha: 0.1,
+                                    ),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
@@ -206,7 +206,8 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => PublicProfileScreen(userId: user.id),
+                                builder: (_) =>
+                                    PublicProfileScreen(userId: user.id),
                               ),
                             );
                           },

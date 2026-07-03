@@ -117,16 +117,22 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.error_outline_rounded, size: 48, color: AppTheme.error),
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          size: 48,
+                          color: AppTheme.error,
+                        ),
                         const SizedBox(height: 16),
                         Text(catalogState.message, textAlign: TextAlign.center),
                         const SizedBox(height: 24),
                         ElevatedButton(
                           onPressed: () {
-                            context.read<CatalogCubit>().loadSportsAndCategories();
+                            context
+                                .read<CatalogCubit>()
+                                .loadSportsAndCategories();
                           },
                           child: const Text('RETRY'),
-                        )
+                        ),
                       ],
                     ),
                   ),
@@ -136,7 +142,9 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
               List<Sport> sports = [];
               if (catalogState is CatalogLoaded) {
                 sports = catalogState.sports;
-                if (_selectedSportId == null && sports.isNotEmpty && !isEditMode) {
+                if (_selectedSportId == null &&
+                    sports.isNotEmpty &&
+                    !isEditMode) {
                   _selectedSportId = sports.first.id;
                 }
               }
@@ -150,7 +158,9 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          isEditMode ? 'Modify Profile' : 'Configure Sport Profile',
+                          isEditMode
+                              ? 'Modify Profile'
+                              : 'Configure Sport Profile',
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
@@ -170,7 +180,9 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                         // Sport Dropdown (Disabled in Edit Mode)
                         if (isEditMode)
                           TextFormField(
-                            initialValue: widget.profile?.sportDetails?.name ?? widget.profile?.sport.toUpperCase(),
+                            initialValue:
+                                widget.profile?.sportDetails?.name ??
+                                widget.profile?.sport.toUpperCase(),
                             enabled: false,
                             decoration: const InputDecoration(
                               labelText: 'Sport',
@@ -201,7 +213,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                                   },
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                  return 'Please select a sport';
+                                return 'Please select a sport';
                               }
                               return null;
                             },
@@ -213,7 +225,8 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                           controller: _roleOrDisciplineController,
                           enabled: !isSubmitting,
                           decoration: const InputDecoration(
-                            labelText: 'Role, Position or Discipline (e.g. Striker, Pace Bowler)',
+                            labelText:
+                                'Role, Position or Discipline (e.g. Striker, Pace Bowler)',
                             prefixIcon: Icon(Icons.location_searching_rounded),
                           ),
                         ),
@@ -265,7 +278,9 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                                   ),
                                 )
                               : Text(
-                                  isEditMode ? 'SAVE CHANGES' : 'CREATE PROFILE',
+                                  isEditMode
+                                      ? 'SAVE CHANGES'
+                                      : 'CREATE PROFILE',
                                 ),
                         ),
                       ],

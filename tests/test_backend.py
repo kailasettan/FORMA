@@ -6,7 +6,18 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import get_db
 from app.main import app
-from app.models import Base, Drop, DropComment, DropProp, PlayerProfile, ScoutShortlist, SportCatalog, SportCategory, User
+from app.models import (
+    Base,
+    Drop,
+    DropComment,
+    DropProp,
+    OrphanedCloudinaryAsset,
+    PlayerProfile,
+    ScoutShortlist,
+    SportCatalog,
+    SportCategory,
+    User,
+)
 from app.security import hash_password
 
 # Testing database URL
@@ -38,6 +49,7 @@ def setup_database():
         {"name": "Basketball", "slug": "basketball"},
         {"name": "Athletics", "slug": "athletics"},
         {"name": "Swimming", "slug": "swimming"},
+        {"name": "Volleyball", "slug": "volleyball"},
     ]
     
     categories_data = {
@@ -45,7 +57,18 @@ def setup_database():
         "cricket": ["batting", "pace bowling", "spin bowling", "fielding"],
         "basketball": ["shooting", "ball handling", "passing", "defending"],
         "athletics": ["sprinting", "jumping", "throwing"],
-        "swimming": ["freestyle", "backstroke", "breaststroke", "butterfly"]
+        "swimming": ["freestyle", "backstroke", "breaststroke", "butterfly"],
+        "volleyball": [
+            "serving",
+            "setting",
+            "spiking",
+            "blocking",
+            "digging",
+            "receiving",
+            "defense",
+            "match highlight",
+            "training drill",
+        ],
     }
 
     for sport in sports_data:
@@ -74,7 +97,7 @@ def setup_database():
 def clean_tables():
     # Clean tables after each test to ensure isolation
     db = TestingSessionLocal()
-    db.execute(text("TRUNCATE TABLE scout_shortlists, drop_comments, drop_props, drops, player_profiles, users CASCADE"))
+    db.execute(text("TRUNCATE TABLE scout_shortlists, orphaned_cloudinary_assets, drop_comments, drop_props, drops, player_profiles, users CASCADE"))
     db.commit()
     db.close()
 
@@ -133,6 +156,35 @@ def test_upload_signature_excludes_api_secret():
     assert "change-me-in-production" not in data.values()
 
 
+def test_volleyball_catalog_is_available():
+    _, token = create_test_user("athlete_a")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    sports_response = client.get("/sports", headers=headers)
+    assert sports_response.status_code == 200
+    volleyball = next(
+        (sport for sport in sports_response.json() if sport["slug"] == "volleyball"),
+        None,
+    )
+    assert volleyball is not None
+    assert volleyball["name"] == "Volleyball"
+    assert volleyball["is_active"] is True
+
+    categories_response = client.get(f"/sports/{volleyball['id']}/categories", headers=headers)
+    assert categories_response.status_code == 200
+    assert [category["name"] for category in categories_response.json()] == [
+        "Serving",
+        "Setting",
+        "Spiking",
+        "Blocking",
+        "Digging",
+        "Receiving",
+        "Defense",
+        "Match Highlight",
+        "Training Drill",
+    ]
+
+
 def test_drop_creation_verifies_cloudinary_metadata():
     athlete, token = create_test_user("athlete_a")
     headers = {"Authorization": f"Bearer {token}"}
@@ -169,9 +221,28 @@ def test_drop_creation_verifies_cloudinary_metadata():
     assert drop_data["public_id"] == "forma/skill_clips/drop_123"
     assert drop_data["playback_url"] == payload["playback_url"]
 
-    # Re-submitting duplicate public_id should be rejected
+    # Re-submitting the same asset is idempotent for the owner.
     response2 = client.post("/drops", json=payload, headers=headers)
-    assert response2.status_code == 409
+    assert response2.status_code == 201
+    assert response2.json()["id"] == drop_data["id"]
+
+    payload_same_asset = payload.copy()
+    payload_same_asset["public_id"] = "forma/skill_clips/drop_123_retry"
+    response3 = client.post("/drops", json=payload_same_asset, headers=headers)
+    assert response3.status_code == 201
+    assert response3.json()["id"] == drop_data["id"]
+
+    db = TestingSessionLocal()
+    assert db.query(Drop).filter_by(provider_asset_id="asset_123").count() == 1
+    db.close()
+
+    user_drops = client.get(f"/users/{athlete.id}/drops", headers=headers)
+    assert user_drops.status_code == 200
+    assert drop_data["id"] in {drop["id"] for drop in user_drops.json()}
+
+    feed = client.get("/drops/feed", headers=headers)
+    assert feed.status_code == 200
+    assert drop_data["id"] in {drop["id"] for drop in feed.json()["items"]}
 
 
 def test_drop_creation_validation_limits():
@@ -212,7 +283,17 @@ def test_drop_creation_validation_limits():
     payload["format"] = "avi"
     response = client.post("/drops", json=payload, headers=headers)
     assert response.status_code == 422
-    assert "Unsupported video format" in response.json()["detail"]
+    assert "format must be one of: mp4, mov, webm" in response.json()["detail"]
+
+    db = TestingSessionLocal()
+    orphan = (
+        db.query(OrphanedCloudinaryAsset)
+        .filter_by(provider_asset_id="asset_123")
+        .first()
+    )
+    assert orphan is not None
+    assert orphan.status == "pending_cleanup"
+    db.close()
 
 
 def test_only_owner_can_delete_drop():
@@ -291,6 +372,77 @@ def test_private_drop_not_visible_publicly():
     response_profile_own = client.get(f"/users/{athlete_a.id}/public-profile", headers=headers_a)
     assert response_profile_own.status_code == 200
     assert len(response_profile_own.json()["drops"]) == 1
+
+
+def test_user_drops_public_profile_and_feed_visibility():
+    athlete_a, token_a = create_test_user("athlete_a")
+    athlete_b, token_b = create_test_user("athlete_b")
+
+    db = TestingSessionLocal()
+    sport = db.query(SportCatalog).filter_by(slug="football").first()
+    public_drop = Drop(
+        user_id=athlete_a.id,
+        sport_id=sport.id,
+        provider_asset_id="asset_public",
+        public_id="drop_public",
+        playback_url="https://example.com/public.mp4",
+        thumbnail_url="https://example.com/public.jpg",
+        duration_seconds=10,
+        format="mp4",
+        bytes=1000,
+        visibility="public",
+        moderation_status="approved",
+    )
+    private_drop = Drop(
+        user_id=athlete_a.id,
+        sport_id=sport.id,
+        provider_asset_id="asset_private",
+        public_id="drop_private",
+        playback_url="https://example.com/private.mp4",
+        duration_seconds=10,
+        format="mp4",
+        bytes=1000,
+        visibility="private",
+        moderation_status="approved",
+    )
+    rejected_drop = Drop(
+        user_id=athlete_a.id,
+        sport_id=sport.id,
+        provider_asset_id="asset_rejected",
+        public_id="drop_rejected",
+        playback_url="https://example.com/rejected.mp4",
+        duration_seconds=10,
+        format="mp4",
+        bytes=1000,
+        visibility="public",
+        moderation_status="rejected",
+    )
+    db.add_all([public_drop, private_drop, rejected_drop])
+    db.commit()
+    db.close()
+
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+    headers_b = {"Authorization": f"Bearer {token_b}"}
+
+    own_drops = client.get(f"/users/{athlete_a.id}/drops", headers=headers_a)
+    assert own_drops.status_code == 200
+    own_public_ids = {drop["public_id"] for drop in own_drops.json()}
+    assert own_public_ids == {"drop_public", "drop_private"}
+
+    other_drops = client.get(f"/users/{athlete_a.id}/drops", headers=headers_b)
+    assert other_drops.status_code == 200
+    other_public_ids = {drop["public_id"] for drop in other_drops.json()}
+    assert other_public_ids == {"drop_public"}
+
+    public_profile = client.get(f"/users/{athlete_a.id}/public-profile", headers=headers_b)
+    assert public_profile.status_code == 200
+    profile_public_ids = {drop["public_id"] for drop in public_profile.json()["drops"]}
+    assert profile_public_ids == {"drop_public"}
+
+    feed = client.get("/drops/feed", headers=headers_b)
+    assert feed.status_code == 200
+    feed_public_ids = {drop["public_id"] for drop in feed.json()["items"]}
+    assert feed_public_ids == {"drop_public"}
 
 
 def test_props_uniqueness_and_toggling():

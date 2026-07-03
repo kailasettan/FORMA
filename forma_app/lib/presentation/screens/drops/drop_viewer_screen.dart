@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import '../../../data/api_config.dart';
 import '../../../domain/entities/drop.dart';
+import '../../cubits/auth_cubit.dart';
 import '../../cubits/public_profile_cubit.dart';
+import '../../cubits/scout_shortlist_cubit.dart';
 import '../../theme.dart';
 import '../profile/public_profile_screen.dart';
 import 'comments_sheet.dart';
@@ -56,7 +60,7 @@ class _DropViewerScreenState extends State<DropViewerScreen> {
         itemBuilder: (context, index) {
           final drop = _currentDrops[index];
           final isFocused = index == _focusedIndex;
-          
+
           return DropVideoPlayerItem(
             drop: drop,
             isFocused: isFocused,
@@ -76,30 +80,39 @@ class DropVideoPlayerItem extends StatefulWidget {
   final Drop drop;
   final bool isFocused;
   final Function(Drop updatedDrop) onDropUpdated;
+  final Future<void> Function(String dropId)? onToggleProps;
+  final void Function(String dropId, int count)? onCommentsCountUpdated;
 
   const DropVideoPlayerItem({
     super.key,
     required this.drop,
     required this.isFocused,
     required this.onDropUpdated,
+    this.onToggleProps,
+    this.onCommentsCountUpdated,
   });
 
   @override
   State<DropVideoPlayerItem> createState() => _DropVideoPlayerItemState();
 }
 
-class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
+class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
+    with WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
   bool _showPlayPauseIcon = false;
   bool _isPlaying = false;
-  
+  bool _hasVideoError = false;
+  bool _isPropBusy = false;
+  bool _isShortlistBusy = false;
+
   // Double tap animation states
-  bool _showPropsOverlay = false;
-  
+  bool _showFireOverlay = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (widget.isFocused) {
       _initPlayer();
     }
@@ -117,17 +130,46 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _disposePlayer();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _controller?.pause();
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+        });
+      }
+    } else if (state == AppLifecycleState.resumed &&
+        widget.isFocused &&
+        _isInitialized) {
+      _controller?.play();
+      if (mounted) {
+        setState(() {
+          _isPlaying = true;
+        });
+      }
+    }
+  }
+
   Future<void> _initPlayer() async {
     _disposePlayer();
+    setState(() {
+      _hasVideoError = false;
+    });
     try {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(widget.drop.playbackUrl));
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(widget.drop.playbackUrl),
+      );
       await controller.initialize();
       if (!mounted) return;
-      
+
       setState(() {
         _controller = controller;
         _isInitialized = true;
@@ -136,7 +178,10 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
       await controller.setLooping(true);
       await controller.play();
     } catch (_) {
-      // Failed loading video
+      if (!mounted) return;
+      setState(() {
+        _hasVideoError = true;
+      });
     }
   }
 
@@ -150,7 +195,7 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
 
   void _togglePlayPause() {
     if (!_isInitialized || _controller == null) return;
-    
+
     setState(() {
       _showPlayPauseIcon = true;
     });
@@ -177,11 +222,10 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
   }
 
   void _handleDoubleTap() {
-    // Props double tap trigger
     setState(() {
-      _showPropsOverlay = true;
+      _showFireOverlay = true;
     });
-    
+
     if (!widget.drop.hasPropped) {
       _triggerProp();
     }
@@ -189,19 +233,21 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) {
         setState(() {
-          _showPropsOverlay = false;
+          _showFireOverlay = false;
         });
       }
     });
   }
 
   void _triggerProp() async {
+    if (_isPropBusy) return;
+    _isPropBusy = true;
     final bool originalHasPropped = widget.drop.hasPropped;
     final int originalPropsCount = widget.drop.propsCount;
-    
+
     final bool newHasPropped = !originalHasPropped;
-    final int newPropsCount = newHasPropped 
-        ? originalPropsCount + 1 
+    final int newPropsCount = newHasPropped
+        ? originalPropsCount + 1
         : (originalPropsCount - 1).clamp(0, 999999);
 
     final updatedDrop = widget.drop.copyWith(
@@ -211,8 +257,12 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
     widget.onDropUpdated(updatedDrop);
 
     try {
-      final publicProfileCubit = context.read<PublicProfileCubit>();
-      await publicProfileCubit.togglePropOnDrop(widget.drop.id);
+      if (widget.onToggleProps != null) {
+        await widget.onToggleProps!(widget.drop.id);
+      } else {
+        final publicProfileCubit = context.read<PublicProfileCubit>();
+        await publicProfileCubit.togglePropOnDrop(widget.drop.id);
+      }
     } catch (_) {
       // Rollback on failure
       final rollbackDrop = widget.drop.copyWith(
@@ -220,6 +270,8 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
         propsCount: originalPropsCount,
       );
       widget.onDropUpdated(rollbackDrop);
+    } finally {
+      _isPropBusy = false;
     }
   }
 
@@ -233,13 +285,44 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
         onCommentsCountUpdated: (count) {
           final updatedDrop = widget.drop.copyWith(commentsCount: count);
           widget.onDropUpdated(updatedDrop);
+          widget.onCommentsCountUpdated?.call(widget.drop.id, count);
         },
       ),
     );
   }
 
+  Future<void> _copyDropLink() async {
+    final link = '${ApiConfig.baseUrl}/drops/${widget.drop.id}';
+    await Clipboard.setData(ClipboardData(text: link));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Drop link copied')));
+  }
+
+  Future<void> _shortlistDrop() async {
+    if (_isShortlistBusy) return;
+    _isShortlistBusy = true;
+    try {
+      await context.read<ScoutShortlistCubit>().shortlistAthlete(
+        widget.drop.userId,
+        dropId: widget.drop.id,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Added to shortlist')));
+    } finally {
+      _isShortlistBusy = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authState = context.watch<AuthCubit>().state;
+    final isScout =
+        authState is AuthAuthenticated && authState.user.role == 'scout';
+
     return GestureDetector(
       onTap: _togglePlayPause,
       onDoubleTap: _handleDoubleTap,
@@ -248,7 +331,7 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
         children: [
           // Background Black
           Container(color: Colors.black),
-          
+
           // Video Player or Loader
           if (_isInitialized && _controller != null)
             Center(
@@ -257,8 +340,43 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
                 child: VideoPlayer(_controller!),
               ),
             )
+          else if (_hasVideoError)
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: Colors.white70,
+                    size: 40,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Drop unavailable',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _initPlayer,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('RETRY'),
+                  ),
+                ],
+              ),
+            )
           else
-            const Center(child: CircularProgressIndicator()),
+            Stack(
+              fit: StackFit.expand,
+              children: [
+                if (widget.drop.thumbnailUrl != null)
+                  Image.network(
+                    widget.drop.thumbnailUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                const Center(child: CircularProgressIndicator()),
+              ],
+            ),
 
           // Sc scrim overlay
           Positioned.fill(
@@ -269,7 +387,7 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
                     Colors.black.withValues(alpha: 0.4),
                     Colors.transparent,
                     Colors.transparent,
-                    Colors.black.withValues(alpha: 0.7)
+                    Colors.black.withValues(alpha: 0.7),
                   ],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -279,14 +397,14 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
             ),
           ),
 
-          // Double Tap Prop Overlay Pop Animation
-          if (_showPropsOverlay)
+          // Double Tap Fire Overlay Pop Animation
+          if (_showFireOverlay)
             const Center(
               child: AnimatedOpacity(
                 opacity: 1.0,
                 duration: Duration(milliseconds: 200),
                 child: Icon(
-                  Icons.emoji_events_rounded,
+                  Icons.local_fire_department_rounded,
                   size: 110,
                   color: AppTheme.accent,
                   shadows: [Shadow(color: Colors.black54, blurRadius: 20)],
@@ -299,7 +417,10 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
             Center(
               child: Container(
                 padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                  color: Colors.black45,
+                  shape: BoxShape.circle,
+                ),
                 child: Icon(
                   _isPlaying ? Icons.play_arrow_rounded : Icons.pause_rounded,
                   size: 40,
@@ -313,7 +434,11 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
             top: MediaQuery.of(context).padding.top + 8,
             left: 16,
             child: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 28),
+              icon: const Icon(
+                Icons.arrow_back_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
               onPressed: () => Navigator.pop(context),
             ),
           ),
@@ -334,7 +459,8 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => PublicProfileScreen(userId: widget.drop.userId),
+                          builder: (_) =>
+                              PublicProfileScreen(userId: widget.drop.userId),
                         ),
                       );
                     }
@@ -343,7 +469,8 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
                     children: [
                       CircleAvatar(
                         radius: 18,
-                        backgroundImage: widget.drop.user?.profilePhotoUrl != null
+                        backgroundImage:
+                            widget.drop.user?.profilePhotoUrl != null
                             ? NetworkImage(widget.drop.user!.profilePhotoUrl!)
                             : null,
                         child: widget.drop.user?.profilePhotoUrl == null
@@ -367,7 +494,10 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
                               widget.drop.user?.username != null
                                   ? '@${widget.drop.user!.username}'
                                   : '',
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -376,9 +506,10 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                
+
                 // Caption
-                if (widget.drop.caption != null && widget.drop.caption!.isNotEmpty)
+                if (widget.drop.caption != null &&
+                    widget.drop.caption!.isNotEmpty)
                   Text(
                     widget.drop.caption!,
                     maxLines: 3,
@@ -392,29 +523,47 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
                   children: [
                     if (widget.drop.sport?.name != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.primary.withValues(alpha: 0.25),
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4)),
+                          border: Border.all(
+                            color: AppTheme.primary.withValues(alpha: 0.4),
+                          ),
                         ),
                         child: Text(
                           widget.drop.sport!.name.toUpperCase(),
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     const SizedBox(width: 8),
                     if (widget.drop.category?.name != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.accent.withValues(alpha: 0.25),
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.accent.withValues(alpha: 0.4)),
+                          border: Border.all(
+                            color: AppTheme.accent.withValues(alpha: 0.4),
+                          ),
                         ),
                         child: Text(
                           widget.drop.category!.name.toUpperCase(),
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                   ],
@@ -430,10 +579,14 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Props Action
+                // Fire Action
                 _buildSideAction(
-                  icon: widget.drop.hasPropped ? Icons.emoji_events_rounded : Icons.emoji_events_outlined,
-                  color: widget.drop.hasPropped ? AppTheme.accent : Colors.white,
+                  icon: widget.drop.hasPropped
+                      ? Icons.local_fire_department_rounded
+                      : Icons.local_fire_department_outlined,
+                  color: widget.drop.hasPropped
+                      ? AppTheme.accent
+                      : Colors.white,
                   label: '${widget.drop.propsCount}',
                   onTap: _triggerProp,
                 ),
@@ -446,6 +599,24 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
                   label: '${widget.drop.commentsCount}',
                   onTap: _showComments,
                 ),
+                const SizedBox(height: 20),
+
+                // Copy Link Action
+                _buildSideAction(
+                  icon: Icons.link_rounded,
+                  color: Colors.white,
+                  label: 'Copy',
+                  onTap: _copyDropLink,
+                ),
+                if (isScout) ...[
+                  const SizedBox(height: 20),
+                  _buildSideAction(
+                    icon: Icons.bookmark_add_outlined,
+                    color: Colors.white,
+                    label: 'Scout',
+                    onTap: _shortlistDrop,
+                  ),
+                ],
               ],
             ),
           ),
@@ -476,7 +647,11 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
         const SizedBox(height: 4),
         Text(
           label,
-          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ],
     );

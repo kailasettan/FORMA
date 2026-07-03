@@ -128,19 +128,35 @@ class UploadSignatureOut(BaseModel):
 
 # Drops Schemas
 class DropCreateIn(BaseModel):
-    provider_asset_id: str
-    public_id: str
-    playback_url: str
+    provider_asset_id: str = Field(min_length=1)
+    public_id: str = Field(min_length=1)
+    playback_url: str = Field(min_length=1)
     thumbnail_url: str | None = None
-    duration_seconds: float
+    duration_seconds: float = Field(gt=0)
     width: int | None = None
     height: int | None = None
-    format: str
-    bytes: int
+    format: str = Field(min_length=1)
+    bytes: int = Field(gt=0)
     sport_id: UUID
     category_id: UUID | None = None
     caption: str | None = None
     visibility: str = "public"
+
+    @field_validator("format")
+    @classmethod
+    def format_must_be_supported(cls, value: str) -> str:
+        normalized = value.lower().strip()
+        if normalized not in {"mp4", "mov", "webm"}:
+            raise ValueError("format must be one of: mp4, mov, webm")
+        return normalized
+
+    @field_validator("visibility")
+    @classmethod
+    def visibility_must_be_supported(cls, value: str) -> str:
+        normalized = value.lower().strip()
+        if normalized not in {"public", "private"}:
+            raise ValueError("visibility must be one of: public, private")
+        return normalized
 
 
 class DropOut(BaseModel):
@@ -174,6 +190,11 @@ class DropOut(BaseModel):
     category: SportCategoryOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DropFeedOut(BaseModel):
+    items: list[DropOut]
+    next_cursor: datetime | None = None
 
 
 # Props & Comments

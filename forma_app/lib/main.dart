@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'data/api_client.dart';
+import 'data/api_config.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'data/repositories/profile_repository_impl.dart';
 import 'data/repositories/stats_repository_impl.dart';
@@ -18,6 +19,7 @@ import 'presentation/cubits/profile_cubit.dart';
 import 'presentation/cubits/stats_cubit.dart';
 import 'presentation/cubits/catalog_cubit.dart';
 import 'presentation/cubits/drop_cubit.dart';
+import 'presentation/cubits/drop_feed_cubit.dart';
 import 'presentation/cubits/drop_upload_cubit.dart';
 import 'presentation/cubits/comments_cubit.dart';
 import 'presentation/cubits/public_profile_cubit.dart';
@@ -30,6 +32,13 @@ import 'presentation/router.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    ApiConfig.validateForCurrentMode();
+  } catch (error) {
+    runApp(ConfigErrorApp(message: error.toString()));
+    return;
+  }
 
   final apiClient = ApiClient();
   final authRepository = AuthRepositoryImpl(apiClient);
@@ -49,6 +58,32 @@ void main() {
       scoutRepository: scoutRepository,
     ),
   );
+}
+
+class ConfigErrorApp extends StatelessWidget {
+  final String message;
+
+  const ConfigErrorApp({super.key, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.darkTheme,
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppTheme.error),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class FormaApp extends StatelessWidget {
@@ -96,6 +131,9 @@ class FormaApp extends StatelessWidget {
           ),
           BlocProvider<DropCubit>(
             create: (context) => DropCubit(dropRepository),
+          ),
+          BlocProvider<DropFeedCubit>(
+            create: (context) => DropFeedCubit(dropRepository),
           ),
           BlocProvider<DropUploadCubit>(
             create: (context) => DropUploadCubit(dropRepository),

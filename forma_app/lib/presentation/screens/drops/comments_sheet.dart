@@ -46,7 +46,9 @@ class _CommentsSheetState extends State<CommentsSheet> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthCubit>().state;
-    final String? loggedInUserId = authState is AuthAuthenticated ? authState.user.id : null;
+    final String? loggedInUserId = authState is AuthAuthenticated
+        ? authState.user.id
+        : null;
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
@@ -92,14 +94,17 @@ class _CommentsSheetState extends State<CommentsSheet> {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24.0),
-                      child: Text(state.message, style: const TextStyle(color: AppTheme.error)),
+                      child: Text(
+                        state.message,
+                        style: const TextStyle(color: AppTheme.error),
+                      ),
                     ),
                   );
                 }
 
                 if (state is CommentsLoaded || state is CommentsPosting) {
-                  final comments = state is CommentsLoaded 
-                      ? state.comments 
+                  final comments = state is CommentsLoaded
+                      ? state.comments
                       : (state as CommentsPosting).comments;
 
                   if (comments.isEmpty) {
@@ -117,7 +122,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                     itemBuilder: (context, index) {
                       final comment = comments[index];
                       final isAuthor = loggedInUserId == comment.userId;
-                      
+
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8.0),
                         child: Row(
@@ -125,7 +130,8 @@ class _CommentsSheetState extends State<CommentsSheet> {
                           children: [
                             CircleAvatar(
                               radius: 16,
-                              backgroundImage: comment.user?.profilePhotoUrl != null
+                              backgroundImage:
+                                  comment.user?.profilePhotoUrl != null
                                   ? NetworkImage(comment.user!.profilePhotoUrl!)
                                   : null,
                               child: comment.user?.profilePhotoUrl == null
@@ -168,9 +174,16 @@ class _CommentsSheetState extends State<CommentsSheet> {
                             ),
                             if (isAuthor)
                               IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded, size: 16, color: AppTheme.textSecondary),
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 16,
+                                  color: AppTheme.textSecondary,
+                                ),
                                 onPressed: () {
-                                  context.read<CommentsCubit>().deleteComment(widget.dropId, comment.id);
+                                  context.read<CommentsCubit>().deleteComment(
+                                    widget.dropId,
+                                    comment.id,
+                                  );
                                 },
                               ),
                           ],
@@ -215,7 +228,10 @@ class _CommentsSheetState extends State<CommentsSheet> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.send_rounded, color: AppTheme.primary),
+                    icon: const Icon(
+                      Icons.send_rounded,
+                      color: AppTheme.primary,
+                    ),
                     onPressed: _submitComment,
                   ),
                 ],

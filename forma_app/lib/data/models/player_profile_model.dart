@@ -15,8 +15,10 @@ class PlayerProfileModel extends PlayerProfile {
 
   factory PlayerProfileModel.fromJson(Map<String, dynamic> json) {
     final sportMap = json['sport'] as Map<String, dynamic>?;
-    final sportDetails = sportMap != null ? SportModel.fromJson(sportMap) : null;
-    
+    final sportDetails = sportMap != null
+        ? SportModel.fromJson(sportMap)
+        : null;
+
     // Fallback: use nested sport slug if available, otherwise sport_id or empty
     final sportSlug = sportDetails?.slug ?? (json['sport_id'] as String? ?? '');
 
@@ -24,10 +26,12 @@ class PlayerProfileModel extends PlayerProfile {
       id: json['id'] as String,
       userId: json['user_id'] as String,
       sport: sportSlug,
-      position: json['position'] as String? ?? json['role_or_discipline'] as String?,
+      position:
+          json['position'] as String? ?? json['role_or_discipline'] as String?,
       skillLevel: json['skill_level'] as String,
       sportId: json['sport_id'] as String,
-      roleOrDiscipline: json['role_or_discipline'] as String? ?? json['position'] as String?,
+      roleOrDiscipline:
+          json['role_or_discipline'] as String? ?? json['position'] as String?,
       sportDetails: sportDetails,
     );
   }

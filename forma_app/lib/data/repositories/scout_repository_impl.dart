@@ -19,7 +19,10 @@ class ScoutRepositoryImpl implements ScoutRepository {
       'drop_id': dropId,
       'private_note': privateNote,
     };
-    final response = await _apiClient.post('/scout/shortlist/$athleteUserId', body: payload);
+    final response = await _apiClient.post(
+      '/scout/shortlist/$athleteUserId',
+      body: payload,
+    );
     return ScoutShortlistModel.fromJson(response as Map<String, dynamic>);
   }
 
@@ -32,7 +35,12 @@ class ScoutRepositoryImpl implements ScoutRepository {
   Future<List<ScoutShortlist>> getShortlist() async {
     final response = await _apiClient.get('/scout/shortlist');
     if (response is List) {
-      return response.map((json) => ScoutShortlistModel.fromJson(json as Map<String, dynamic>)).toList();
+      return response
+          .map(
+            (json) =>
+                ScoutShortlistModel.fromJson(json as Map<String, dynamic>),
+          )
+          .toList();
     }
     return [];
   }

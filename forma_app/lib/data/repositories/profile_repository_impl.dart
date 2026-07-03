@@ -96,16 +96,24 @@ class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   @override
-  Future<PublicAthleteProfile> fetchPublicAthleteProfileByUsername(String username) async {
-    final response = await _apiClient.get('/users/by-username/$username/public-profile');
+  Future<PublicAthleteProfile> fetchPublicAthleteProfileByUsername(
+    String username,
+  ) async {
+    final response = await _apiClient.get(
+      '/users/by-username/$username/public-profile',
+    );
     return PublicAthleteProfileModel.fromJson(response as Map<String, dynamic>);
   }
 
   @override
   Future<List<User>> searchAthletes(String query) async {
-    final response = await _apiClient.get('/users/search?q=${Uri.encodeQueryComponent(query)}');
+    final response = await _apiClient.get(
+      '/users/search?q=${Uri.encodeQueryComponent(query)}',
+    );
     if (response is List) {
-      return response.map((item) => UserModel.fromJson(item as Map<String, dynamic>)).toList();
+      return response
+          .map((item) => UserModel.fromJson(item as Map<String, dynamic>))
+          .toList();
     }
     return [];
   }

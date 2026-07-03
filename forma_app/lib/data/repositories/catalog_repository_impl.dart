@@ -14,7 +14,9 @@ class CatalogRepositoryImpl implements CatalogRepository {
   Future<List<Sport>> getSports() async {
     final response = await _apiClient.get('/sports');
     if (response is List) {
-      return response.map((json) => SportModel.fromJson(json as Map<String, dynamic>)).toList();
+      return response
+          .map((json) => SportModel.fromJson(json as Map<String, dynamic>))
+          .toList();
     }
     return [];
   }
@@ -23,7 +25,11 @@ class CatalogRepositoryImpl implements CatalogRepository {
   Future<List<SportCategory>> getCategories(String sportId) async {
     final response = await _apiClient.get('/sports/$sportId/categories');
     if (response is List) {
-      return response.map((json) => SportCategoryModel.fromJson(json as Map<String, dynamic>)).toList();
+      return response
+          .map(
+            (json) => SportCategoryModel.fromJson(json as Map<String, dynamic>),
+          )
+          .toList();
     }
     return [];
   }

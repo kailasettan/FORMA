@@ -44,7 +44,11 @@ class ScoutShortlistCubit extends Cubit<ScoutShortlistState> {
     }
   }
 
-  Future<void> shortlistAthlete(String athleteId, {String? dropId, String? privateNote}) async {
+  Future<void> shortlistAthlete(
+    String athleteId, {
+    String? dropId,
+    String? privateNote,
+  }) async {
     try {
       emit(ScoutShortlistLoading());
       await _scoutRepository.shortlistAthlete(
@@ -61,13 +65,15 @@ class ScoutShortlistCubit extends Cubit<ScoutShortlistState> {
 
   Future<void> removeShortlist(String athleteId) async {
     try {
-      final currentList = state is ScoutShortlistLoaded 
-          ? (state as ScoutShortlistLoaded).shortlist 
+      final currentList = state is ScoutShortlistLoaded
+          ? (state as ScoutShortlistLoaded).shortlist
           : <ScoutShortlist>[];
-          
+
       emit(ScoutShortlistLoading());
       await _scoutRepository.removeShortlist(athleteId);
-      final updatedList = currentList.where((item) => item.athleteUserId != athleteId).toList();
+      final updatedList = currentList
+          .where((item) => item.athleteUserId != athleteId)
+          .toList();
       emit(ScoutShortlistLoaded(updatedList));
     } catch (e) {
       emit(ScoutShortlistError(e.toString()));

@@ -35,7 +35,7 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
   final ProfileRepository _profileRepository;
   final DropRepository _dropRepository;
   final ScoutRepository _scoutRepository;
-  
+
   bool _isTogglingProp = false;
 
   PublicProfileCubit(
@@ -47,7 +47,9 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
   Future<void> loadProfile(String userId) async {
     try {
       emit(PublicProfileLoading());
-      final profile = await _profileRepository.fetchPublicAthleteProfile(userId);
+      final profile = await _profileRepository.fetchPublicAthleteProfile(
+        userId,
+      );
       emit(PublicProfileLoaded(profile));
     } catch (e) {
       emit(PublicProfileError(e.toString()));
@@ -57,14 +59,19 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
   Future<void> loadProfileByUsername(String username) async {
     try {
       emit(PublicProfileLoading());
-      final profile = await _profileRepository.fetchPublicAthleteProfileByUsername(username);
+      final profile = await _profileRepository
+          .fetchPublicAthleteProfileByUsername(username);
       emit(PublicProfileLoaded(profile));
     } catch (e) {
       emit(PublicProfileError(e.toString()));
     }
   }
 
-  Future<void> toggleShortlist(String athleteUserId, {String? dropId, String? privateNote}) async {
+  Future<void> toggleShortlist(
+    String athleteUserId, {
+    String? dropId,
+    String? privateNote,
+  }) async {
     if (state is! PublicProfileLoaded) return;
     final currentState = state as PublicProfileLoaded;
     final profile = currentState.profile;
@@ -110,7 +117,7 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
 
     final currentState = state as PublicProfileLoaded;
     final profile = currentState.profile;
-    
+
     // Find the drop
     final dropIndex = profile.drops.indexWhere((d) => d.id == dropId);
     if (dropIndex == -1) {
@@ -120,8 +127,8 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
 
     final originalDrop = profile.drops[dropIndex];
     final bool wasPropped = originalDrop.hasPropped;
-    final int newPropsCount = wasPropped 
-        ? (originalDrop.propsCount - 1).clamp(0, 999999) 
+    final int newPropsCount = wasPropped
+        ? (originalDrop.propsCount - 1).clamp(0, 999999)
         : originalDrop.propsCount + 1;
 
     // Optimistic Drop Update
@@ -155,7 +162,7 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
       // Rollback on failure
       final rollbackDrops = List<dynamic>.from(profile.drops);
       rollbackDrops[dropIndex] = originalDrop;
-      
+
       final rollbackProfile = PublicAthleteProfile(
         user: profile.user,
         playerProfiles: profile.playerProfiles,
@@ -163,7 +170,7 @@ class PublicProfileCubit extends Cubit<PublicProfileState> {
         isShortlisted: profile.isShortlisted,
         profileCompletionPercentage: profile.profileCompletionPercentage,
       );
-      
+
       emit(PublicProfileLoaded(rollbackProfile));
       _isTogglingProp = false;
     }

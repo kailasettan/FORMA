@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/foundation.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/entities/drop.dart';
 import '../../../domain/entities/player_profile.dart';
 import '../../cubits/profile_cubit.dart';
 import '../../cubits/drop_cubit.dart';
+import '../../cubits/drop_feed_cubit.dart';
 import '../../theme.dart';
 import '../drops/drop_viewer_screen.dart';
 import '../drops/drop_upload_screen.dart';
@@ -31,11 +33,21 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
 
   int _calculateCompletion(List<PlayerProfile> profiles, List<Drop> drops) {
     int score = 0;
-    if (widget.user.profilePhotoUrl != null && widget.user.profilePhotoUrl!.isNotEmpty) score += 15;
-    if (widget.user.headline != null && widget.user.headline!.isNotEmpty) score += 15;
+    if (widget.user.profilePhotoUrl != null &&
+        widget.user.profilePhotoUrl!.isNotEmpty) {
+      score += 15;
+    }
+    if (widget.user.headline != null && widget.user.headline!.isNotEmpty) {
+      score += 15;
+    }
     if (widget.user.bio != null && widget.user.bio!.isNotEmpty) score += 15;
-    if (widget.user.location != null && widget.user.location!.isNotEmpty) score += 15;
-    if (widget.user.availability != null && widget.user.availability!.isNotEmpty) score += 15;
+    if (widget.user.location != null && widget.user.location!.isNotEmpty) {
+      score += 15;
+    }
+    if (widget.user.availability != null &&
+        widget.user.availability!.isNotEmpty) {
+      score += 15;
+    }
     if (profiles.isNotEmpty) score += 15;
     if (drops.isNotEmpty) score += 10;
     return score;
@@ -52,8 +64,14 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
         child: Wrap(
           children: [
             ListTile(
-              leading: const Icon(Icons.delete_outline_rounded, color: AppTheme.error),
-              title: const Text('Delete Drop', style: TextStyle(color: AppTheme.error)),
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppTheme.error,
+              ),
+              title: const Text(
+                'Delete Drop',
+                style: TextStyle(color: AppTheme.error),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDelete(context, drop.id);
@@ -70,7 +88,9 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Drop'),
-        content: const Text('This action is permanent and will delete your video from Cloudinary. Proceed?'),
+        content: const Text(
+          'This action is permanent and will delete your video from Cloudinary. Proceed?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -81,10 +101,16 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
               Navigator.pop(ctx);
               context.read<DropCubit>().deleteDrop(dropId, widget.user.id);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Drop deleted'), backgroundColor: AppTheme.success),
+                const SnackBar(
+                  content: Text('Drop deleted'),
+                  backgroundColor: AppTheme.success,
+                ),
               );
             },
-            child: const Text('DELETE', style: TextStyle(color: AppTheme.error)),
+            child: const Text(
+              'DELETE',
+              style: TextStyle(color: AppTheme.error),
+            ),
           ),
         ],
       ),
@@ -95,12 +121,15 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
   Widget build(BuildContext context) {
     return BlocBuilder<ProfileCubit, ProfileState>(
       builder: (context, profileState) {
-        final List<PlayerProfile> profiles =
-            profileState is ProfileLoaded ? profileState.profiles : [];
+        final List<PlayerProfile> profiles = profileState is ProfileLoaded
+            ? profileState.profiles
+            : [];
 
         return BlocBuilder<DropCubit, DropState>(
           builder: (context, dropState) {
-            final List<Drop> drops = dropState is DropLoaded ? dropState.drops : [];
+            final List<Drop> drops = dropState is DropLoaded
+                ? dropState.drops
+                : [];
             final completion = _calculateCompletion(profiles, drops);
 
             return RefreshIndicator(
@@ -126,13 +155,18 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                 children: [
                                   CircleAvatar(
                                     radius: 32,
-                                    backgroundImage: widget.user.profilePhotoUrl != null
-                                        ? NetworkImage(widget.user.profilePhotoUrl!)
+                                    backgroundImage:
+                                        widget.user.profilePhotoUrl != null
+                                        ? NetworkImage(
+                                            widget.user.profilePhotoUrl!,
+                                          )
                                         : null,
                                     child: widget.user.profilePhotoUrl == null
                                         ? Text(
                                             widget.user.fullName.isNotEmpty
-                                                ? widget.user.fullName.substring(0, 1).toUpperCase()
+                                                ? widget.user.fullName
+                                                      .substring(0, 1)
+                                                      .toUpperCase()
                                                 : 'U',
                                             style: const TextStyle(
                                               fontSize: 24,
@@ -144,7 +178,8 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           widget.user.fullName,
@@ -165,11 +200,18 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                           const SizedBox(height: 4),
                                           Row(
                                             children: [
-                                              const Icon(Icons.location_on_outlined, size: 12, color: AppTheme.textSecondary),
+                                              const Icon(
+                                                Icons.location_on_outlined,
+                                                size: 12,
+                                                color: AppTheme.textSecondary,
+                                              ),
                                               const SizedBox(width: 4),
                                               Text(
                                                 widget.user.location!,
-                                                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                                                style: const TextStyle(
+                                                  color: AppTheme.textSecondary,
+                                                  fontSize: 11,
+                                                ),
                                               ),
                                             ],
                                           ),
@@ -195,11 +237,20 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                 Align(
                                   alignment: Alignment.centerLeft,
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: AppTheme.primary.withValues(alpha: 0.1),
+                                      color: AppTheme.primary.withValues(
+                                        alpha: 0.1,
+                                      ),
                                       borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                                      border: Border.all(
+                                        color: AppTheme.primary.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                      ),
                                     ),
                                     child: Text(
                                       widget.user.availability!,
@@ -223,26 +274,79 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (_) => EditProfileScreen(user: widget.user),
+                                            builder: (_) => EditProfileScreen(
+                                              user: widget.user,
+                                            ),
                                           ),
                                         );
                                       },
-                                      icon: const Icon(Icons.edit_rounded, size: 16),
+                                      icon: const Icon(
+                                        Icons.edit_rounded,
+                                        size: 16,
+                                      ),
                                       label: const Text('EDIT PROFILE'),
                                     ),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => const DropUploadScreen(),
-                                          ),
-                                        );
+                                      onPressed: () async {
+                                        final dropCubit = context
+                                            .read<DropCubit>();
+                                        final profileCubit = context
+                                            .read<ProfileCubit>();
+                                        final dropFeedCubit = context
+                                            .read<DropFeedCubit>();
+                                        final createdDrop =
+                                            await Navigator.push<Drop>(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    const DropUploadScreen(),
+                                              ),
+                                            );
+                                        if (createdDrop != null &&
+                                            context.mounted) {
+                                          _debugUploadResult(
+                                            'created drop returned: id=${createdDrop.id}',
+                                          );
+                                          try {
+                                            dropCubit.insertDrop(createdDrop);
+                                            _debugUploadResult(
+                                              'profile insertion success: id=${createdDrop.id}',
+                                            );
+                                          } catch (error) {
+                                            _debugUploadResult(
+                                              'profile insertion failed: ${error.runtimeType}: $error',
+                                            );
+                                          }
+
+                                          try {
+                                            dropFeedCubit
+                                                .insertNewlyCreatedDrop(
+                                                  createdDrop,
+                                                );
+                                            _debugUploadResult(
+                                              'feed insertion success: id=${createdDrop.id}',
+                                            );
+                                          } catch (error) {
+                                            _debugUploadResult(
+                                              'feed insertion failed: ${error.runtimeType}: $error',
+                                            );
+                                          }
+
+                                          _refreshAfterUpload(
+                                            context: context,
+                                            dropCubit: dropCubit,
+                                            profileCubit: profileCubit,
+                                            dropFeedCubit: dropFeedCubit,
+                                          );
+                                        }
                                       },
-                                      icon: const Icon(Icons.add_a_photo_rounded, size: 16),
+                                      icon: const Icon(
+                                        Icons.add_a_photo_rounded,
+                                        size: 16,
+                                      ),
                                       label: const Text('ADD DROP'),
                                     ),
                                   ),
@@ -267,11 +371,15 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text(
                                     'Profile Completion',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
                                   ),
                                   Text(
                                     '$completion%',
@@ -295,21 +403,45 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                 const SizedBox(height: 12),
                                 const Text(
                                   'Complete these items to stand out to scouts:',
-                                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary,
+                                  ),
                                 ),
                                 const SizedBox(height: 8),
-                                _buildCompletionCheckItem('Add a profile photo',
-                                    widget.user.profilePhotoUrl != null && widget.user.profilePhotoUrl!.isNotEmpty),
-                                _buildCompletionCheckItem('Add a sports headline',
-                                    widget.user.headline != null && widget.user.headline!.isNotEmpty),
-                                _buildCompletionCheckItem('Write your athletic bio',
-                                    widget.user.bio != null && widget.user.bio!.isNotEmpty),
-                                _buildCompletionCheckItem('Set your location',
-                                    widget.user.location != null && widget.user.location!.isNotEmpty),
-                                _buildCompletionCheckItem('Set your availability status',
-                                    widget.user.availability != null && widget.user.availability!.isNotEmpty),
-                                _buildCompletionCheckItem('Create a sports specialization profile', profiles.isNotEmpty),
-                                _buildCompletionCheckItem('Upload a portfolio video Drop', drops.isNotEmpty),
+                                _buildCompletionCheckItem(
+                                  'Add a profile photo',
+                                  widget.user.profilePhotoUrl != null &&
+                                      widget.user.profilePhotoUrl!.isNotEmpty,
+                                ),
+                                _buildCompletionCheckItem(
+                                  'Add a sports headline',
+                                  widget.user.headline != null &&
+                                      widget.user.headline!.isNotEmpty,
+                                ),
+                                _buildCompletionCheckItem(
+                                  'Write your athletic bio',
+                                  widget.user.bio != null &&
+                                      widget.user.bio!.isNotEmpty,
+                                ),
+                                _buildCompletionCheckItem(
+                                  'Set your location',
+                                  widget.user.location != null &&
+                                      widget.user.location!.isNotEmpty,
+                                ),
+                                _buildCompletionCheckItem(
+                                  'Set your availability status',
+                                  widget.user.availability != null &&
+                                      widget.user.availability!.isNotEmpty,
+                                ),
+                                _buildCompletionCheckItem(
+                                  'Create a sports specialization profile',
+                                  profiles.isNotEmpty,
+                                ),
+                                _buildCompletionCheckItem(
+                                  'Upload a portfolio video Drop',
+                                  drops.isNotEmpty,
+                                ),
                               ],
                             ],
                           ),
@@ -321,13 +453,22 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                   // Sports Specializations Header
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0, bottom: 8.0),
+                      padding: const EdgeInsets.only(
+                        left: 16.0,
+                        right: 16.0,
+                        top: 16.0,
+                        bottom: 8.0,
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
                             'Specializations',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textSecondary),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textSecondary,
+                            ),
                           ),
                           TextButton.icon(
                             onPressed: () {
@@ -363,7 +504,10 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                       delegate: SliverChildBuilderDelegate((context, index) {
                         final p = profiles[index];
                         return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 4.0,
+                          ),
                           child: ListTile(
                             leading: Container(
                               padding: const EdgeInsets.all(8),
@@ -371,17 +515,26 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                 color: AppTheme.primary.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.sports_rounded, color: AppTheme.primary),
+                              child: const Icon(
+                                Icons.sports_rounded,
+                                color: AppTheme.primary,
+                              ),
                             ),
                             title: Text(
-                              p.sportDetails?.name.toUpperCase() ?? p.sport.toUpperCase(),
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              p.sportDetails?.name.toUpperCase() ??
+                                  p.sport.toUpperCase(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             subtitle: Text(
                               'Role: ${p.roleOrDiscipline ?? p.position ?? "N/A"} • Level: ${p.skillLevel.toUpperCase()}',
                             ),
                             trailing: IconButton(
-                              icon: const Icon(Icons.edit_outlined, color: AppTheme.primary),
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                color: AppTheme.primary,
+                              ),
                               onPressed: () {
                                 Navigator.pushNamed(
                                   context,
@@ -398,7 +551,12 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                   // Drops Section Header
                   const SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.only(left: 16.0, right: 16.0, top: 24.0, bottom: 8.0),
+                      padding: EdgeInsets.only(
+                        left: 16.0,
+                        right: 16.0,
+                        top: 24.0,
+                        bottom: 8.0,
+                      ),
                       child: Text(
                         'Your Drops Portfolio',
                         style: TextStyle(
@@ -413,7 +571,12 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                   // Drops grid
                   if (dropState is DropLoading)
                     const SliverToBoxAdapter(
-                      child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: CircularProgressIndicator())),
+                      child: Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24.0),
+                          child: CircularProgressIndicator(),
+                        ),
+                      ),
                     )
                   else if (drops.isEmpty)
                     const SliverToBoxAdapter(
@@ -423,7 +586,10 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                           child: Text(
                             'Your Drops gallery is empty.\nClick "ADD DROP" above to upload your first clip.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              height: 1.5,
+                            ),
                           ),
                         ),
                       ),
@@ -432,130 +598,165 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0),
                       sliver: SliverGrid(
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 8.0,
-                          mainAxisSpacing: 8.0,
-                          childAspectRatio: 9 / 16,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final drop = drops[index];
-                            return GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => DropViewerScreen(
-                                      drops: drops,
-                                      initialIndex: index,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 8.0,
+                              mainAxisSpacing: 8.0,
+                              childAspectRatio: 9 / 16,
+                            ),
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          final drop = drops[index];
+                          return GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DropViewerScreen(
+                                    drops: drops,
+                                    initialIndex: index,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12.0),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  // Thumbnail
+                                  drop.thumbnailUrl != null
+                                      ? Image.network(
+                                          drop.thumbnailUrl!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (ctx, err, stack) =>
+                                              Container(
+                                                color: Colors.white12,
+                                                child: const Icon(
+                                                  Icons.video_library_rounded,
+                                                ),
+                                              ),
+                                        )
+                                      : Container(
+                                          color: Colors.white12,
+                                          child: const Icon(
+                                            Icons.video_library_rounded,
+                                          ),
+                                        ),
+                                  // Lower Scrim
+                                  Positioned.fill(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            Colors.transparent,
+                                            Colors.black.withValues(alpha: 0.6),
+                                          ],
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          stops: const [0.6, 1.0],
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                );
-                              },
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12.0),
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    // Thumbnail
-                                    drop.thumbnailUrl != null
-                                        ? Image.network(
-                                            drop.thumbnailUrl!,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (ctx, err, stack) => Container(
-                                              color: Colors.white12,
-                                              child: const Icon(Icons.video_library_rounded),
-                                            ),
-                                          )
-                                        : Container(
-                                            color: Colors.white12,
-                                            child: const Icon(Icons.video_library_rounded),
-                                          ),
-                                    // Lower Scrim
-                                    Positioned.fill(
-                                      child: DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            colors: [Colors.transparent, Colors.black.withValues(alpha: 0.6)],
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                            stops: const [0.6, 1.0],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    // Manage options top right
-                                    Positioned(
-                                      top: 4,
-                                      right: 4,
-                                      child: InkWell(
-                                        onTap: () => _showDropOptions(context, drop),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.black38,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(Icons.more_vert_rounded, size: 14, color: Colors.white),
-                                        ),
-                                      ),
-                                    ),
-                                    // Visibility badge bottom left
-                                    Positioned(
-                                      top: 6,
-                                      left: 6,
+                                  // Manage options top right
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: InkWell(
+                                      onTap: () =>
+                                          _showDropOptions(context, drop),
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                        decoration: BoxDecoration(
-                                          color: drop.visibility == 'public'
-                                              ? AppTheme.success.withValues(alpha: 0.8)
-                                              : Colors.red.withValues(alpha: 0.8),
-                                          borderRadius: BorderRadius.circular(3),
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.black38,
+                                          shape: BoxShape.circle,
                                         ),
-                                        child: Text(
-                                          drop.visibility.toUpperCase(),
-                                          style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white),
+                                        child: const Icon(
+                                          Icons.more_vert_rounded,
+                                          size: 14,
+                                          color: Colors.white,
                                         ),
                                       ),
                                     ),
-                                    // Duration and counts bottom
-                                    Positioned(
-                                      bottom: 8,
-                                      left: 8,
-                                      right: 8,
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              const Icon(Icons.play_arrow_rounded, size: 10, color: Colors.white),
-                                              Text(
-                                                '${drop.durationSeconds.toStringAsFixed(1)}s',
-                                                style: const TextStyle(color: Colors.white, fontSize: 9),
-                                              ),
-                                            ],
-                                          ),
-                                          Row(
-                                            children: [
-                                              const Icon(Icons.emoji_events_rounded, size: 10, color: AppTheme.accent),
-                                              const SizedBox(width: 2),
-                                              Text(
-                                                '${drop.propsCount}',
-                                                style: const TextStyle(color: Colors.white, fontSize: 9),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
+                                  ),
+                                  // Visibility badge bottom left
+                                  Positioned(
+                                    top: 6,
+                                    left: 6,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 1,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: drop.visibility == 'public'
+                                            ? AppTheme.success.withValues(
+                                                alpha: 0.8,
+                                              )
+                                            : Colors.red.withValues(alpha: 0.8),
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                      child: Text(
+                                        drop.visibility.toUpperCase(),
+                                        style: const TextStyle(
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
                                       ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                  // Duration and counts bottom
+                                  Positioned(
+                                    bottom: 8,
+                                    left: 8,
+                                    right: 8,
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.play_arrow_rounded,
+                                              size: 10,
+                                              color: Colors.white,
+                                            ),
+                                            Text(
+                                              '${drop.durationSeconds.toStringAsFixed(1)}s',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 9,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.emoji_events_rounded,
+                                              size: 10,
+                                              color: AppTheme.accent,
+                                            ),
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              '${drop.propsCount}',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 9,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
-                            );
-                          },
-                          childCount: drops.length,
-                        ),
+                            ),
+                          );
+                        }, childCount: drops.length),
                       ),
                     ),
                   const SliverToBoxAdapter(child: SizedBox(height: 40)),
@@ -574,7 +775,9 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
       child: Row(
         children: [
           Icon(
-            isChecked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            isChecked
+                ? Icons.check_circle_rounded
+                : Icons.radio_button_unchecked_rounded,
             size: 14,
             color: isChecked ? AppTheme.success : AppTheme.textSecondary,
           ),
@@ -584,7 +787,9 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
               text,
               style: TextStyle(
                 fontSize: 12,
-                color: isChecked ? AppTheme.textSecondary : AppTheme.textPrimary,
+                color: isChecked
+                    ? AppTheme.textSecondary
+                    : AppTheme.textPrimary,
                 decoration: isChecked ? TextDecoration.lineThrough : null,
               ),
             ),
@@ -592,5 +797,50 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
         ],
       ),
     );
+  }
+
+  Future<void> _refreshAfterUpload({
+    required BuildContext context,
+    required DropCubit dropCubit,
+    required ProfileCubit profileCubit,
+    required DropFeedCubit dropFeedCubit,
+  }) async {
+    try {
+      await Future.wait([
+        dropCubit.loadUserDrops(widget.user.id, preserveCurrent: true),
+        profileCubit.loadProfiles(widget.user.id),
+        dropFeedCubit.refreshCurrent(),
+      ]);
+      _debugUploadResult('background refresh success');
+      if (!context.mounted) return;
+      final refreshFailed =
+          dropCubit.state is DropError ||
+          profileCubit.state is ProfileError ||
+          dropFeedCubit.state.error != null;
+      if (refreshFailed) {
+        _showRefreshFailed(context);
+      }
+    } catch (error) {
+      _debugUploadResult(
+        'background refresh failed: ${error.runtimeType}: $error',
+      );
+      if (!context.mounted) return;
+      _showRefreshFailed(context);
+    }
+  }
+
+  void _showRefreshFailed(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Drop posted, but refresh failed. Pull to refresh.'),
+        backgroundColor: AppTheme.accent,
+      ),
+    );
+  }
+
+  void _debugUploadResult(String message) {
+    if (kDebugMode) {
+      debugPrint('[DropUploadResult] $message');
+    }
   }
 }

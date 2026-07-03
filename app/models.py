@@ -124,6 +124,9 @@ class PlayerProfile(Base):
 
 class Drop(Base):
     __tablename__ = "drops"
+    __table_args__ = (
+        UniqueConstraint("provider_asset_id", name="uq_drops_provider_asset_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -168,6 +171,27 @@ class Drop(Base):
     )
     comments: Mapped[list["DropComment"]] = relationship(
         cascade="all, delete-orphan"
+    )
+
+
+class OrphanedCloudinaryAsset(Base):
+    __tablename__ = "orphaned_cloudinary_assets"
+    __table_args__ = (
+        UniqueConstraint("provider_asset_id", name="uq_orphaned_cloudinary_assets_provider_asset_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    provider_asset_id: Mapped[str] = mapped_column(String, nullable=False)
+    public_id: Mapped[str] = mapped_column(String, nullable=False)
+    reason: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, default="pending_cleanup", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
     )
 
 

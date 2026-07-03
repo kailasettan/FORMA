@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Drop, DropComment, DropProp, PlayerProfile, ScoutShortlist, SportCatalog, SportCategory, User
+from app.routers.drops import hydrate_drop
 from app.schemas import (
+    DropOut,
     PlayerProfileOut,
     PrivateUserOut,
     PublicAthleteProfileOut,
@@ -104,6 +106,45 @@ def list_player_profiles(user_id: UUID, db: Session = Depends(get_db)) -> list[P
     return profiles
 
 
+@router.get("/{user_id}/drops", response_model=list[DropOut])
+def list_user_drops(
+    user_id: UUID,
+    limit: int = 30,
+    cursor: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[Drop]:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    page_size = max(1, min(limit, 50))
+    query = select(Drop).where(
+        Drop.user_id == user_id,
+        Drop.moderation_status == "approved",
+    )
+    if current_user.id != user_id:
+        query = query.where(Drop.visibility == "public")
+    else:
+        query = query.where(Drop.visibility.in_(["public", "private"]))
+    if cursor:
+        try:
+            from datetime import datetime
+
+            cursor_dt = datetime.fromisoformat(cursor.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid cursor",
+            ) from None
+        query = query.where(Drop.created_at < cursor_dt)
+
+    drops = list(db.scalars(query.order_by(Drop.created_at.desc()).limit(page_size)))
+    for drop in drops:
+        hydrate_drop(drop, db, current_user)
+    return drops
+
+
 @router.get("/{user_id}/public-profile", response_model=PublicAthleteProfileOut)
 def get_public_profile(
     user_id: UUID,
@@ -121,33 +162,21 @@ def get_public_profile(
     for p in profiles:
         p.sport = db.get(SportCatalog, p.sport_id)
 
-    # 2. Fetch drops (only public if not owner)
-    query = select(Drop).where(Drop.user_id == user.id)
+    # 2. Fetch drops. Public profile readers only see approved public Drops.
+    query = select(Drop).where(
+        Drop.user_id == user.id,
+        Drop.moderation_status == "approved",
+    )
     if current_user.id != user.id:
         query = query.where(Drop.visibility == "public")
+    else:
+        query = query.where(Drop.visibility.in_(["public", "private"]))
     query = query.order_by(Drop.created_at.desc())
     drops = list(db.scalars(query))
 
     # Populate drops metrics and relations
     for drop in drops:
-        drop.sport = db.get(SportCatalog, drop.sport_id)
-        if drop.category_id:
-            drop.category = db.get(SportCategory, drop.category_id)
-        drop.user = user
-        drop.props_count = db.scalar(select(func.count(DropProp.id)).where(DropProp.drop_id == drop.id))
-        drop.comments_count = db.scalar(
-            select(func.count(DropComment.id)).where(
-                (DropComment.drop_id == drop.id) & (DropComment.deleted_at == None)
-            )
-        )
-        drop.has_propped = (
-            db.scalar(
-                select(DropProp).where(
-                    (DropProp.drop_id == drop.id) & (DropProp.user_id == current_user.id)
-                )
-            )
-            is not None
-        )
+        hydrate_drop(drop, db, current_user)
 
     # 3. Check if shortlisted (only visible if requester is a scout)
     is_shortlisted = False

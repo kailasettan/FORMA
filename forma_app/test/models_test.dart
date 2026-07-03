@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forma/data/models/user_model.dart';
 import 'package:forma/data/models/auth_response.dart';
 import 'package:forma/data/models/aggregated_stats_model.dart';
+import 'package:forma/data/models/drop_model.dart';
 
 void main() {
   group('JSON Parsing Tests', () {
@@ -79,6 +80,40 @@ void main() {
       expect(aggregated.matchesPlayed, 5);
       expect(aggregated.goals, 3);
       expect(aggregated.assists, 2);
+    });
+
+    test('DropModel should tolerate optional missing publish fields', () {
+      final json = {
+        'id': 'drop_1',
+        'user_id': 'user_1',
+        'player_profile_id': null,
+        'sport_id': 'sport_1',
+        'category_id': null,
+        'provider': 'cloudinary',
+        'provider_asset_id': 'asset_1',
+        'public_id': 'forma/skill_clips/drop_1',
+        'playback_url': 'https://res.cloudinary.com/demo/video/upload/drop.mp4',
+        'caption': null,
+        'duration_seconds': '12.4',
+        'format': 'mp4',
+        'bytes': 1024.0,
+        'moderation_status': 'approved',
+        'visibility': 'public',
+        'created_at': '2026-07-03T12:00:00Z',
+        'current_user_gave_props': false,
+      };
+
+      final drop = DropModel.fromJson(json);
+
+      expect(drop.id, 'drop_1');
+      expect(drop.thumbnailUrl, isNull);
+      expect(drop.width, isNull);
+      expect(drop.height, isNull);
+      expect(drop.propsCount, 0);
+      expect(drop.commentsCount, 0);
+      expect(drop.hasPropped, isFalse);
+      expect(drop.category, isNull);
+      expect(drop.updatedAt, drop.createdAt);
     });
   });
 }

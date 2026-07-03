@@ -56,9 +56,9 @@ class CommentsCubit extends Cubit<CommentsState> {
     final currentComments = state is CommentsLoaded
         ? (state as CommentsLoaded).comments
         : state is CommentsPosting
-            ? (state as CommentsPosting).comments
-            : <DropComment>[];
-            
+        ? (state as CommentsPosting).comments
+        : <DropComment>[];
+
     try {
       emit(CommentsPosting(currentComments));
       final newComment = await _dropRepository.postComment(dropId, body);
@@ -76,7 +76,9 @@ class CommentsCubit extends Cubit<CommentsState> {
     try {
       emit(CommentsLoading());
       await _dropRepository.deleteComment(dropId, commentId);
-      final updatedComments = currentComments.where((c) => c.id != commentId).toList();
+      final updatedComments = currentComments
+          .where((c) => c.id != commentId)
+          .toList();
       emit(CommentsLoaded(updatedComments));
     } catch (e) {
       emit(CommentsError(e.toString()));

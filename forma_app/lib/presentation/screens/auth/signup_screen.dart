@@ -153,7 +153,10 @@ class _SignupScreenState extends State<SignupScreen> {
                         prefixIcon: Icon(Icons.people_outline),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'athlete', child: Text('ATHLETE')),
+                        DropdownMenuItem(
+                          value: 'athlete',
+                          child: Text('ATHLETE'),
+                        ),
                         DropdownMenuItem(value: 'scout', child: Text('SCOUT')),
                       ],
                       onChanged: (val) {

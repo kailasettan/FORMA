@@ -6,7 +6,7 @@ abstract class ScoutRepository {
     String? dropId,
     String? privateNote,
   });
-  
+
   Future<void> removeShortlist(String athleteUserId);
   Future<List<ScoutShortlist>> getShortlist();
 }

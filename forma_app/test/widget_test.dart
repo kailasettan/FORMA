@@ -40,6 +40,9 @@ class FakeAuthRepository implements AuthRepository {
   Future<User?> checkAuth() async => null;
 
   @override
+  Future<void> healthCheck() async {}
+
+  @override
   Future<void> logout() async {}
 
   @override
@@ -91,7 +94,9 @@ class FakeProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<PublicAthleteProfile> fetchPublicAthleteProfileByUsername(String username) async {
+  Future<PublicAthleteProfile> fetchPublicAthleteProfileByUsername(
+    String username,
+  ) async {
     throw UnimplementedError();
   }
 
@@ -165,6 +170,15 @@ class FakeDropRepository implements DropRepository {
 
   @override
   Future<List<Drop>> getUserDrops(String userId) async => [];
+
+  @override
+  Future<DropFeedPage> getDropsFeed({
+    String? cursor,
+    int limit = 10,
+    String? sportId,
+  }) async {
+    return const DropFeedPage(items: []);
+  }
 
   @override
   Future<Drop> getDropDetails(String dropId) async {

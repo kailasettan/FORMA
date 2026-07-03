@@ -151,6 +151,9 @@ class FakeAuthRepository implements AuthRepository {
   Future<User?> checkAuth() async => null;
 
   @override
+  Future<void> healthCheck() async {}
+
+  @override
   Future<void> logout() async {}
 
   @override

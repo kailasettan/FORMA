@@ -1,14 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
+import '../../../domain/entities/drop.dart';
 import '../../../domain/entities/sport.dart';
 import '../../../domain/entities/sport_category.dart';
-import '../../cubits/auth_cubit.dart';
 import '../../cubits/catalog_cubit.dart';
 import '../../cubits/drop_upload_cubit.dart';
-import '../../cubits/drop_cubit.dart';
 import '../../theme.dart';
 
 class DropUploadScreen extends StatefulWidget {
@@ -25,7 +25,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
 
   File? _videoFile;
   VideoPlayerController? _videoPlayerController;
-  
+
   String? _selectedSportId;
   String? _selectedCategoryId;
   String _selectedVisibility = 'public';
@@ -37,6 +37,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<DropUploadCubit>().reset();
       context.read<CatalogCubit>().loadSportsAndCategories();
     });
   }
@@ -73,7 +74,8 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
 
       if (fileSizeMB > 50) {
         setState(() {
-          _videoValidationError = 'Video file size exceeds 50 MB limit (${fileSizeMB.toStringAsFixed(1)} MB)';
+          _videoValidationError =
+              'Video file size exceeds 50 MB limit (${fileSizeMB.toStringAsFixed(1)} MB)';
           _isValidatingVideo = false;
         });
         return;
@@ -83,11 +85,12 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
       final controller = VideoPlayerController.file(videoFile);
       await controller.initialize();
       final duration = controller.value.duration.inMilliseconds / 1000.0;
-      
+
       if (duration > 60.0) {
         await controller.dispose();
         setState(() {
-          _videoValidationError = 'Video exceeds 60 seconds limit (${duration.toStringAsFixed(1)} seconds). Please trim your clip.';
+          _videoValidationError =
+              'Video exceeds 60 seconds limit (${duration.toStringAsFixed(1)} seconds). Please trim your clip.';
           _isValidatingVideo = false;
         });
         return;
@@ -100,7 +103,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
         _videoFile = videoFile;
         _videoPlayerController = controller;
         _isValidatingVideo = false;
-        
+
         // Autoplay/loop preview
         _videoPlayerController!.setLooping(true);
         _videoPlayerController!.play();
@@ -123,44 +126,50 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
 
     if (_formKey.currentState!.validate()) {
       context.read<DropUploadCubit>().uploadDrop(
-            file: _videoFile!,
-            sportId: _selectedSportId!,
-            categoryId: _selectedCategoryId,
-            caption: _captionController.text.trim().isNotEmpty ? _captionController.text.trim() : null,
-            visibility: _selectedVisibility,
-          );
+        file: _videoFile!,
+        sportId: _selectedSportId!,
+        categoryId: _selectedCategoryId,
+        caption: _captionController.text.trim().isNotEmpty
+            ? _captionController.text.trim()
+            : null,
+        visibility: _selectedVisibility,
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authState = context.watch<AuthCubit>().state;
-    final String? loggedInUserId = authState is AuthAuthenticated ? authState.user.id : null;
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Upload Drop'),
-      ),
+      appBar: AppBar(title: const Text('Upload Drop')),
       body: BlocConsumer<DropUploadCubit, DropUploadState>(
         listener: (context, state) {
           if (state is DropUploadSuccess) {
+            _debugUploadScreen(
+              'success state: id=${state.drop.id} '
+              'secondary=${state.secondaryMessage != null}',
+            );
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Drop published successfully!'),
+              SnackBar(
+                content: Text(state.secondaryMessage ?? 'Drop posted'),
                 backgroundColor: AppTheme.success,
               ),
             );
-            // Refresh drops checklist
-            if (loggedInUserId != null) {
-              context.read<DropCubit>().loadUserDrops(loggedInUserId);
+            if (state.secondaryMessage == null) {
+              _debugUploadScreen('popping created drop: id=${state.drop.id}');
+              Navigator.pop<Drop>(context, state.drop);
             }
-            Navigator.pop(context);
+          } else if (state is DropUploadError) {
+            _debugUploadScreen('error state: ${state.message}');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: AppTheme.error,
+              ),
+            );
           }
         },
         builder: (context, state) {
-          final bool isUploading = state is DropUploadLoading ||
-              state is DropUploadProgress ||
-              state is DropUploadRegistering;
+          final bool isUploading = state.isActive;
 
           return BlocBuilder<CatalogCubit, CatalogState>(
             builder: (context, catalogState) {
@@ -215,11 +224,15 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                                 color: Colors.white12,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: _videoValidationError != null ? AppTheme.error : Colors.white24,
+                                  color: _videoValidationError != null
+                                      ? AppTheme.error
+                                      : Colors.white24,
                                 ),
                               ),
                               clipBehavior: Clip.antiAlias,
-                              child: _videoFile != null && _videoPlayerController != null
+                              child:
+                                  _videoFile != null &&
+                                      _videoPlayerController != null
                                   ? Stack(
                                       fit: StackFit.expand,
                                       children: [
@@ -240,7 +253,8 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                                       child: _isValidatingVideo
                                           ? const CircularProgressIndicator()
                                           : const Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
                                               children: [
                                                 Icon(
                                                   Icons.video_call_rounded,
@@ -250,7 +264,9 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                                                 SizedBox(height: 8),
                                                 Text(
                                                   'Tap to Select Video Clip',
-                                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
                                                 ),
                                               ],
                                             ),
@@ -262,7 +278,10 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                           const SizedBox(height: 8),
                           Text(
                             _videoValidationError!,
-                            style: const TextStyle(color: AppTheme.error, fontSize: 12),
+                            style: const TextStyle(
+                              color: AppTheme.error,
+                              fontSize: 12,
+                            ),
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -293,12 +312,15 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                               child: Text(sport.name.toUpperCase()),
                             );
                           }).toList(),
-                          onChanged: isUploading ? null : (val) {
-                            setState(() {
-                              _selectedSportId = val;
-                              _selectedCategoryId = null; // Reset category
-                            });
-                          },
+                          onChanged: isUploading
+                              ? null
+                              : (val) {
+                                  setState(() {
+                                    _selectedSportId = val;
+                                    _selectedCategoryId =
+                                        null; // Reset category
+                                  });
+                                },
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Please select a sport';
@@ -323,11 +345,13 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                               child: Text(cat.name.toUpperCase()),
                             );
                           }).toList(),
-                          onChanged: (isUploading || activeCategories.isEmpty) ? null : (val) {
-                            setState(() {
-                              _selectedCategoryId = val;
-                            });
-                          },
+                          onChanged: (isUploading || activeCategories.isEmpty)
+                              ? null
+                              : (val) {
+                                  setState(() {
+                                    _selectedCategoryId = val;
+                                  });
+                                },
                         ),
                         const SizedBox(height: 18),
 
@@ -339,30 +363,49 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                             prefixIcon: Icon(Icons.visibility_rounded),
                           ),
                           items: const [
-                            DropdownMenuItem(value: 'public', child: Text('PUBLIC')),
-                            DropdownMenuItem(value: 'private', child: Text('PRIVATE')),
+                            DropdownMenuItem(
+                              value: 'public',
+                              child: Text('PUBLIC'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'private',
+                              child: Text('PRIVATE'),
+                            ),
                           ],
-                          onChanged: isUploading ? null : (val) {
-                            if (val != null) {
-                              setState(() {
-                                _selectedVisibility = val;
-                              });
-                            }
-                          },
+                          onChanged: isUploading
+                              ? null
+                              : (val) {
+                                  if (val != null) {
+                                    setState(() {
+                                      _selectedVisibility = val;
+                                    });
+                                  }
+                                },
                         ),
                         const SizedBox(height: 32),
 
                         // Progress representation
-                        if (isUploading) ...[
+                        if (state is DropUploadSuccess) ...[
+                          _buildUploadProgress(state),
+                          const SizedBox(height: 24),
+                        ] else if (isUploading) ...[
                           _buildUploadProgress(state),
                           const SizedBox(height: 24),
                         ],
+                        if (state is DropUploadError) ...[
+                          Text(
+                            state.message,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: AppTheme.error,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
 
                         // Submit Button
-                        ElevatedButton(
-                          onPressed: isUploading ? null : _submit,
-                          child: Text(isUploading ? 'PUBLISHING...' : 'PUBLISH DROP'),
-                        ),
+                        _buildActions(state, isUploading),
                       ],
                     ),
                   ),
@@ -376,15 +419,23 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
   }
 
   Widget _buildUploadProgress(DropUploadState state) {
-    String label = 'Initializing Secure Stream...';
-    double percent = 0.0;
+    String label = 'Preparing video...';
+    double? percent;
 
-    if (state is DropUploadProgress) {
+    if (state is DropUploadRequestingSignature) {
+      label = 'Preparing video...';
+    } else if (state is DropUploadProgress) {
       percent = state.progress;
-      label = 'Uploading clip: ${(percent * 100).toStringAsFixed(0)}%';
-    } else if (state is DropUploadRegistering) {
+      label = 'Uploading ${(percent * 100).toStringAsFixed(0)}%';
+    } else if (state is DropUploadVerifying) {
+      label = 'Verifying upload...';
+    } else if (state is DropUploadPublishing) {
+      label = 'Publishing Drop...';
+    } else if (state is DropUploadRefreshing) {
+      label = 'Refreshing profile and feed...';
+    } else if (state is DropUploadSuccess) {
       percent = 1.0;
-      label = 'Verifying with FORMA backend...';
+      label = 'Drop posted';
     }
 
     return Column(
@@ -401,9 +452,66 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
         Text(
           label,
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ],
     );
+  }
+
+  Widget _buildActions(DropUploadState state, bool isUploading) {
+    if (state is DropUploadSuccess) {
+      return ElevatedButton(
+        onPressed: () => Navigator.pop<Drop>(context, state.drop),
+        child: const Text('DONE'),
+      );
+    }
+
+    if (state is DropUploadError) {
+      final retryLabel = state.retryAction == DropUploadRetryAction.publish
+          ? 'RETRY PUBLISH'
+          : 'RETRY UPLOAD';
+      final retryAction = state.retryAction == DropUploadRetryAction.publish
+          ? context.read<DropUploadCubit>().retryPublish
+          : context.read<DropUploadCubit>().retryUpload;
+      return Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CANCEL'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: retryAction,
+              child: Text(retryLabel),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (isUploading) {
+      return OutlinedButton(
+        onPressed: () => context.read<DropUploadCubit>().cancel(),
+        child: const Text('CANCEL'),
+      );
+    }
+
+    return ElevatedButton(
+      onPressed: _submit,
+      child: const Text('PUBLISH DROP'),
+    );
+  }
+
+  void _debugUploadScreen(String message) {
+    if (kDebugMode) {
+      debugPrint('[DropUploadScreen] $message');
+    }
   }
 }

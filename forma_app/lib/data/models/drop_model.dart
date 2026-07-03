@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../domain/entities/drop.dart';
 import 'user_model.dart';
 import 'sport_model.dart';
@@ -34,38 +35,55 @@ class DropModel extends Drop {
   });
 
   factory DropModel.fromJson(Map<String, dynamic> json) {
-    final userMap = json['user'] as Map<String, dynamic>?;
-    final sportMap = json['sport'] as Map<String, dynamic>?;
-    final catMap = json['category'] as Map<String, dynamic>?;
+    try {
+      final userMap = _mapOrNull(json['user'] ?? json['athlete']);
+      final sportMap = _mapOrNull(json['sport']);
+      final catMap = _mapOrNull(json['category']);
 
-    return DropModel(
-      id: json['id'] as String,
-      userId: json['user_id'] as String,
-      playerProfileId: json['player_profile_id'] as String?,
-      sportId: json['sport_id'] as String,
-      categoryId: json['category_id'] as String?,
-      provider: json['provider'] as String,
-      providerAssetId: json['provider_asset_id'] as String,
-      publicId: json['public_id'] as String,
-      playbackUrl: json['playback_url'] as String,
-      thumbnailUrl: json['thumbnail_url'] as String?,
-      caption: json['caption'] as String?,
-      durationSeconds: (json['duration_seconds'] as num).toDouble(),
-      width: json['width'] as int?,
-      height: json['height'] as int?,
-      format: json['format'] as String,
-      bytes: json['bytes'] as int,
-      moderationStatus: json['moderation_status'] as String,
-      visibility: json['visibility'] as String,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
-      propsCount: json['props_count'] as int? ?? 0,
-      commentsCount: json['comments_count'] as int? ?? 0,
-      hasPropped: json['has_propped'] as bool? ?? false,
-      user: userMap != null ? UserModel.fromJson(userMap) : null,
-      sport: sportMap != null ? SportModel.fromJson(sportMap) : null,
-      category: catMap != null ? SportCategoryModel.fromJson(catMap) : null,
-    );
+      final createdAt = _dateTimeOrNow(json['created_at']);
+      return DropModel(
+        id: _requiredString(json, 'id'),
+        userId: _requiredString(json, 'user_id'),
+        playerProfileId: _stringOrNull(json['player_profile_id']),
+        sportId: _requiredString(json, 'sport_id'),
+        categoryId: _stringOrNull(json['category_id']),
+        provider: _stringOrDefault(json['provider'], 'cloudinary'),
+        providerAssetId: _requiredString(json, 'provider_asset_id'),
+        publicId: _requiredString(json, 'public_id'),
+        playbackUrl: _requiredString(json, 'playback_url'),
+        thumbnailUrl: _stringOrNull(json['thumbnail_url']),
+        caption: _stringOrNull(json['caption']),
+        durationSeconds: _doubleOrDefault(json['duration_seconds']),
+        width: _intOrNull(json['width']),
+        height: _intOrNull(json['height']),
+        format: _requiredString(json, 'format'),
+        bytes: _intOrDefault(json['bytes']),
+        moderationStatus: _stringOrDefault(
+          json['moderation_status'],
+          'approved',
+        ),
+        visibility: _stringOrDefault(json['visibility'], 'public'),
+        createdAt: createdAt,
+        updatedAt: _dateTimeOrDefault(json['updated_at'], createdAt),
+        propsCount: _intOrDefault(json['props_count']),
+        commentsCount: _intOrDefault(json['comments_count']),
+        hasPropped:
+            _boolOrDefault(json['has_propped']) ??
+            _boolOrDefault(json['current_user_gave_props']) ??
+            false,
+        user: userMap != null ? UserModel.fromJson(userMap) : null,
+        sport: sportMap != null ? SportModel.fromJson(sportMap) : null,
+        category: catMap != null ? SportCategoryModel.fromJson(catMap) : null,
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint(
+          '[DropModel] parse failed: ${error.runtimeType}: $error '
+          'keys=${json.keys.toList()}',
+        );
+      }
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -95,4 +113,59 @@ class DropModel extends Drop {
       'has_propped': hasPropped,
     };
   }
+}
+
+Map<String, dynamic>? _mapOrNull(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return null;
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is String && value.isNotEmpty) return value;
+  throw FormatException('Drop response missing required field: $key');
+}
+
+String _stringOrDefault(Object? value, String fallback) {
+  if (value is String && value.isNotEmpty) return value;
+  return fallback;
+}
+
+String? _stringOrNull(Object? value) {
+  if (value is String && value.isNotEmpty) return value;
+  return null;
+}
+
+int _intOrDefault(Object? value, [int fallback = 0]) {
+  return _intOrNull(value) ?? fallback;
+}
+
+int? _intOrNull(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
+double _doubleOrDefault(Object? value, [double fallback = 0]) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? fallback;
+  return fallback;
+}
+
+bool? _boolOrDefault(Object? value) {
+  if (value is bool) return value;
+  return null;
+}
+
+DateTime _dateTimeOrNow(Object? value) {
+  return _dateTimeOrDefault(value, DateTime.now().toUtc());
+}
+
+DateTime _dateTimeOrDefault(Object? value, DateTime fallback) {
+  if (value is String) {
+    return DateTime.tryParse(value) ?? fallback;
+  }
+  return fallback;
 }

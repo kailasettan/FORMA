@@ -23,9 +23,7 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Your Shortlisted Athletes'),
-      ),
+      appBar: AppBar(title: const Text('Your Shortlisted Athletes')),
       body: BlocBuilder<ScoutShortlistCubit, ScoutShortlistState>(
         builder: (context, state) {
           if (state is ScoutShortlistLoading) {
@@ -39,7 +37,11 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline_rounded, size: 48, color: AppTheme.error),
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      size: 48,
+                      color: AppTheme.error,
+                    ),
                     const SizedBox(height: 16),
                     Text(state.message, textAlign: TextAlign.center),
                     const SizedBox(height: 24),
@@ -48,7 +50,7 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                         context.read<ScoutShortlistCubit>().loadShortlist();
                       },
                       child: const Text('RETRY'),
-                    )
+                    ),
                   ],
                 ),
               ),
@@ -71,7 +73,10 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                     SizedBox(height: 16),
                     Text(
                       'No athletes shortlisted yet',
-                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 16,
+                      ),
                     ),
                     SizedBox(height: 8),
                     Padding(
@@ -79,7 +84,10 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                       child: Text(
                         'Go to Find Athletes to search for players and add them to your private list.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -121,28 +129,42 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                           ),
                           title: Text(
                             athlete.fullName,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 '@${athlete.username}',
-                                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                                style: const TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 12,
+                                ),
                               ),
                               if (athlete.headline != null) ...[
                                 const SizedBox(height: 4),
                                 Text(
                                   athlete.headline!,
-                                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                                  style: const TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ],
                             ],
                           ),
                           trailing: IconButton(
-                            icon: const Icon(Icons.bookmark_remove_rounded, color: AppTheme.error),
+                            icon: const Icon(
+                              Icons.bookmark_remove_rounded,
+                              color: AppTheme.error,
+                            ),
                             onPressed: () {
-                              context.read<ScoutShortlistCubit>().removeShortlist(athlete.id);
+                              context
+                                  .read<ScoutShortlistCubit>()
+                                  .removeShortlist(athlete.id);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('Removed from shortlist'),
@@ -152,11 +174,13 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                             },
                           ),
                           onTap: () {
-                            final scoutCubit = context.read<ScoutShortlistCubit>();
+                            final scoutCubit = context
+                                .read<ScoutShortlistCubit>();
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => PublicProfileScreen(userId: athlete.id),
+                                builder: (_) =>
+                                    PublicProfileScreen(userId: athlete.id),
                               ),
                             ).then((_) {
                               scoutCubit.loadShortlist();
@@ -164,7 +188,8 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                           },
                         ),
                         // Private note banner if exists
-                        if (item.privateNote != null && item.privateNote!.isNotEmpty) ...[
+                        if (item.privateNote != null &&
+                            item.privateNote!.isNotEmpty) ...[
                           const Divider(height: 1, indent: 16, endIndent: 16),
                           Padding(
                             padding: const EdgeInsets.all(12.0),
@@ -177,11 +202,16 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.note_alt_outlined, size: 16, color: AppTheme.primary),
+                                  const Icon(
+                                    Icons.note_alt_outlined,
+                                    size: 16,
+                                    color: AppTheme.primary,
+                                  ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         const Text(
                                           'PRIVATE NOTE',
@@ -194,7 +224,10 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                                         const SizedBox(height: 2),
                                         Text(
                                           item.privateNote!,
-                                          style: const TextStyle(fontSize: 12, height: 1.4),
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            height: 1.4,
+                                          ),
                                         ),
                                       ],
                                     ),

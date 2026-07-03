@@ -71,6 +71,11 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<void> healthCheck() async {
+    await _apiClient.healthCheck();
+  }
+
+  @override
   Future<void> logout() async {
     await _apiClient.deleteToken();
   }

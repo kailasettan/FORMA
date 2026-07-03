@@ -40,6 +40,7 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> checkAuth() async {
     emit(AuthLoading());
     try {
+      await _authRepository.healthCheck();
       final user = await _authRepository.checkAuth();
       if (user != null) {
         emit(AuthAuthenticated(user));
@@ -54,6 +55,7 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> login(String email, String password) async {
     emit(AuthLoading());
     try {
+      await _authRepository.healthCheck();
       final user = await _authRepository.login(
         email: email,
         password: password,
@@ -73,6 +75,7 @@ class AuthCubit extends Cubit<AuthState> {
   }) async {
     emit(AuthLoading());
     try {
+      await _authRepository.healthCheck();
       final user = await _authRepository.signUp(
         username: username,
         email: email,
