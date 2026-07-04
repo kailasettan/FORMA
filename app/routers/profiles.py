@@ -70,3 +70,22 @@ def update_player_profile(
     db.refresh(profile)
     profile.sport = db.get(SportCatalog, profile.sport_id)
     return profile
+
+
+@router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_player_profile(
+    profile_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    profile = db.scalar(select(PlayerProfile).where(PlayerProfile.id == profile_id))
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    if profile.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own profile",
+        )
+
+    db.delete(profile)
+    db.commit()
