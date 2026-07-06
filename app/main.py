@@ -1,10 +1,23 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.routers import auth, profiles, stats, users, catalog, drops, scout, uploads
 
-app = FastAPI(title="Forma API")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    auth.log_resend_config_state()
+    logger.info("Flutter default API base URL is configured in forma_app/lib/data/api_config.dart")
+    yield
+
+
+app = FastAPI(title="Forma API", lifespan=lifespan)
 
 
 @app.exception_handler(RequestValidationError)

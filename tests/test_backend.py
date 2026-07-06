@@ -315,6 +315,7 @@ def test_signup_creates_unverified_user_and_sends_email():
 
         mock_send.assert_called_once()
         assert mock_send.call_args[0][0] == email
+        assert mock_send.call_args.kwargs["purpose"] == "email_verification"
         otp = mock_send.call_args[0][1]
         assert len(otp) == 6
 
@@ -600,6 +601,7 @@ def test_forgot_password_sends_hashed_reset_otp_for_existing_email(mock_send_ema
     assert response.status_code == 200
     assert response.json()["message"] == "If an account exists, a reset code has been sent."
     mock_send_email.assert_called_once()
+    assert mock_send_email.call_args.kwargs["purpose"] == "password_reset"
     otp = mock_send_email.call_args[0][1]
 
     db = TestingSessionLocal()
@@ -734,6 +736,7 @@ def test_resend_reset_otp_respects_cooldown(mock_send_email):
     assert response.status_code == 200
     assert response.json()["message"] == "If an account exists, a reset code has been sent."
     assert mock_send_email.call_count == 2
+    assert mock_send_email.call_args.kwargs["purpose"] == "password_reset"
 
 
 def test_reset_password_rejects_weak_or_mismatched_password(mock_send_email):

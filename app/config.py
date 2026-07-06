@@ -3,6 +3,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    app_env: str = Field(
+        default="development",
+        validation_alias=AliasChoices("APP_ENV", "ENVIRONMENT", "RAILWAY_ENVIRONMENT"),
+    )
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/forma"
     secret_key: str = Field(
         default="change-me-in-production",
@@ -28,6 +32,11 @@ class Settings(BaseSettings):
         if self.database_url.startswith("postgresql://"):
             return self.database_url.replace("postgresql://", "postgresql+psycopg://", 1)
         return self.database_url
+
+    @property
+    def is_development(self) -> bool:
+        normalized = self.app_env.lower().strip()
+        return normalized in {"dev", "development", "local", "test"} or "localhost" in self.database_url
 
 
 settings = Settings()
