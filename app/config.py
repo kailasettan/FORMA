@@ -9,12 +9,17 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("JWT_SECRET_KEY", "SECRET_KEY"),
     )
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60 * 24 * 7
+    access_token_expire_minutes: int = 60 * 24 * 30
 
     # Cloudinary Config
     cloudinary_cloud_name: str = "nyuzzi3x"
     cloudinary_api_key: str = Field(default="", validation_alias=AliasChoices("CLOUDINARY_API_KEY"))
     cloudinary_api_secret: str = Field(default="", validation_alias=AliasChoices("CLOUDINARY_API_SECRET"))
+
+    # Resend Config
+    resend_api_key: str = Field(default="", validation_alias=AliasChoices("RESEND_API_KEY"))
+    from_email: str = Field(default="onboarding@resend.dev", validation_alias=AliasChoices("FROM_EMAIL"))
+    from_name: str = Field(default="FORMA", validation_alias=AliasChoices("FROM_NAME"))
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

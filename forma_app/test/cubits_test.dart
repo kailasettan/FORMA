@@ -59,6 +59,36 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<String?> getToken() async => savedToken;
+
+  @override
+  Future<void> verifyOtp({required String email, required String otp}) async {
+    if (shouldThrow) throw Exception('Verification failed');
+  }
+
+  @override
+  Future<void> resendOtp({required String email}) async {
+    if (shouldThrow) throw Exception('Resend failed');
+  }
+
+  @override
+  Future<void> forgotPassword({required String email}) async {
+    if (shouldThrow) throw Exception('Reset request failed');
+  }
+
+  @override
+  Future<void> resendPasswordResetOtp({required String email}) async {
+    if (shouldThrow) throw Exception('Reset resend failed');
+  }
+
+  @override
+  Future<void> resetPassword({
+    required String email,
+    required String otp,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    if (shouldThrow) throw Exception('Reset failed');
+  }
 }
 
 class FakeDropRepository implements DropRepository {

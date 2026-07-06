@@ -8,6 +8,7 @@ import 'api_config.dart';
 class ApiClient {
   final http.Client _client;
   final FlutterSecureStorage _secureStorage;
+  VoidCallback? onSessionExpired;
 
   static const String tokenKey = 'forma_jwt_token';
 
@@ -192,6 +193,7 @@ class ApiClient {
         : response.body;
 
     if (statusCode == 401) {
+      onSessionExpired?.call();
       throw UnauthenticatedException(
         message?.toString() ?? 'Session expired. Please log in again.',
         statusCode: statusCode,

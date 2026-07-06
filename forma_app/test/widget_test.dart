@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:forma/main.dart';
+import 'package:forma/data/api_client.dart';
 import 'package:forma/domain/entities/user.dart';
 import 'package:forma/domain/entities/sport.dart';
 import 'package:forma/domain/entities/sport_category.dart';
@@ -22,6 +23,11 @@ import 'package:forma/presentation/cubits/auth_cubit.dart';
 import 'package:forma/presentation/cubits/catalog_cubit.dart';
 import 'package:forma/presentation/cubits/profile_cubit.dart';
 import 'package:forma/presentation/screens/auth/signup_screen.dart';
+import 'package:forma/presentation/screens/auth/login_screen.dart';
+import 'package:forma/presentation/screens/auth/otp_screen.dart';
+import 'package:forma/presentation/screens/auth/forgot_password_screen.dart';
+import 'package:forma/presentation/screens/auth/reset_password_screen.dart';
+import 'package:forma/presentation/screens/dashboard_screen.dart';
 import 'package:forma/presentation/screens/profile/edit_profile_screen.dart';
 import 'package:forma/presentation/screens/profile/profile_form_screen.dart';
 import 'dart:io';
@@ -31,6 +37,16 @@ class FakeAuthRepository implements AuthRepository {
   String? lastSignupUsername;
   String? lastSignupEmail;
   String? lastSignupFullName;
+  User? checkAuthUser;
+  bool loggedOut = false;
+  String? lastVerifiedEmail;
+  String? lastVerifiedOtp;
+  String? lastResentEmail;
+  String? lastForgotPasswordEmail;
+  String? lastResetEmail;
+  String? lastResetOtp;
+  String? lastNewPassword;
+  String? lastConfirmPassword;
 
   @override
   Future<User> login({required String email, required String password}) async {
@@ -60,16 +76,52 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<User?> checkAuth() async => null;
+  Future<User?> checkAuth() async => checkAuthUser;
 
   @override
   Future<void> healthCheck() async {}
 
   @override
-  Future<void> logout() async {}
+  Future<void> logout() async {
+    loggedOut = true;
+  }
 
   @override
   Future<String?> getToken() async => null;
+
+  @override
+  Future<void> verifyOtp({required String email, required String otp}) async {
+    lastVerifiedEmail = email;
+    lastVerifiedOtp = otp;
+  }
+
+  @override
+  Future<void> resendOtp({required String email}) async {
+    lastResentEmail = email;
+  }
+
+  @override
+  Future<void> forgotPassword({required String email}) async {
+    lastForgotPasswordEmail = email;
+  }
+
+  @override
+  Future<void> resendPasswordResetOtp({required String email}) async {
+    lastResentEmail = email;
+  }
+
+  @override
+  Future<void> resetPassword({
+    required String email,
+    required String otp,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    lastResetEmail = email;
+    lastResetOtp = otp;
+    lastNewPassword = newPassword;
+    lastConfirmPassword = confirmPassword;
+  }
 }
 
 class FakeProfileRepository implements ProfileRepository {
@@ -313,6 +365,7 @@ void main() {
 
     await tester.pumpWidget(
       FormaApp(
+        apiClient: ApiClient(),
         authRepository: authRepo,
         profileRepository: profileRepo,
         statsRepository: statsRepo,
@@ -355,7 +408,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        routes: {'/dashboard': (_) => const Scaffold(body: Text('Dashboard'))},
+        routes: {
+          '/otp-verification': (_) => const Scaffold(body: Text('OTP Screen')),
+        },
         home: BlocProvider(
           create: (_) => AuthCubit(authRepo),
           child: const SignupScreen(),
@@ -369,14 +424,18 @@ void main() {
     );
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Username'),
-      'betauser',
+      '  betauser  ',
     );
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Email Address'),
-      'beta@example.com',
+      '  Beta@Example.com  ',
     );
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Password'),
+      'password123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Confirm Password'),
       'password123',
     );
     await tester.tap(find.text('CREATE ACCOUNT'));
@@ -385,7 +444,7 @@ void main() {
     expect(authRepo.lastSignupRole, 'athlete');
     expect(authRepo.lastSignupUsername, 'betauser');
     expect(authRepo.lastSignupEmail, 'beta@example.com');
-    expect(find.text('Dashboard'), findsOneWidget);
+    expect(find.text('OTP Screen'), findsOneWidget);
   });
 
   testWidgets('edit profile opens with stale focused sport id', (
@@ -494,5 +553,516 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Edit Profile'), findsOneWidget);
     expect(find.text('Skill Level'), findsOneWidget);
+  });
+
+  testWidgets(
+    'logged-in user logs out, auth state becomes unauthenticated, login screen is shown',
+    (WidgetTester tester) async {
+      final authRepo = FakeAuthRepository();
+      // Simulate authenticated state initially
+      authRepo.checkAuthUser = User(
+        id: 'user-123',
+        username: 'testuser',
+        email: 'test@example.com',
+        fullName: 'Test User',
+        role: 'athlete',
+        createdAt: DateTime(2026),
+        emailVerified: true,
+      );
+
+      final profileRepo = FakeProfileRepository();
+      final statsRepo = FakeStatsRepository();
+      final catalogRepo = FakeCatalogRepository();
+      final dropRepo = FakeDropRepository();
+      final scoutRepo = FakeScoutRepository();
+
+      await tester.pumpWidget(
+        FormaApp(
+          apiClient: ApiClient(),
+          authRepository: authRepo,
+          profileRepository: profileRepo,
+          statsRepository: statsRepo,
+          catalogRepository: catalogRepo,
+          dropRepository: dropRepo,
+          scoutRepository: scoutRepo,
+        ),
+      );
+
+      // Initial load: splash screen is shown
+      await tester.pump();
+      // Finish splash onComplete delay (3 seconds in SplashScreen)
+      await tester.pumpAndSettle(const Duration(seconds: 3));
+
+      // Confirm that the auth state became authenticated and AuthGate rendered the Dashboard
+      expect(find.byType(DashboardScreen), findsOneWidget);
+      expect(find.byType(LoginScreen), findsNothing);
+
+      // Get the AuthCubit from the context and call logout
+      final authCubit = tester
+          .element(find.byType(DashboardScreen))
+          .read<AuthCubit>();
+      await authCubit.logout();
+      await tester.pumpAndSettle();
+
+      // Verify that checkAuth / logout was called on the repo, and the screen transitioned to LoginScreen
+      expect(authRepo.loggedOut, isTrue);
+      expect(find.byType(DashboardScreen), findsNothing);
+      expect(find.byType(LoginScreen), findsOneWidget);
+    },
+  );
+
+  testWidgets('signup rejects weak password', (WidgetTester tester) async {
+    final authRepo = FakeAuthRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider(
+          create: (_) => AuthCubit(authRepo),
+          child: const SignupScreen(),
+        ),
+      ),
+    );
+
+    // Enter a weak password (no numbers)
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Full Name'),
+      'Beta User',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Username'),
+      'betauser',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email Address'),
+      'beta@example.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Password'),
+      'weakpass',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Confirm Password'),
+      'weakpass',
+    );
+
+    await tester.tap(find.text('CREATE ACCOUNT'));
+    await tester.pumpAndSettle();
+
+    // Verify repository was not called
+    expect(authRepo.lastSignupUsername, isNull);
+    // Verify validation error message is shown
+    expect(
+      find.text(
+        'Password must be at least 8 characters and include a letter and a number.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('signup rejects confirm password mismatch', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider(
+          create: (_) => AuthCubit(authRepo),
+          child: const SignupScreen(),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Full Name'),
+      'Beta User',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Username'),
+      'betauser',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email Address'),
+      'beta@example.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Password'),
+      'password123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Confirm Password'),
+      'different123',
+    );
+
+    await tester.tap(find.text('CREATE ACCOUNT'));
+    await tester.pumpAndSettle();
+
+    // Verify repository was not called
+    expect(authRepo.lastSignupUsername, isNull);
+    // Verify validation error message is shown
+    expect(find.text('Passwords do not match.'), findsOneWidget);
+  });
+
+  testWidgets('password visibility toggle works', (WidgetTester tester) async {
+    final authRepo = FakeAuthRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider(
+          create: (_) => AuthCubit(authRepo),
+          child: const LoginScreen(),
+        ),
+      ),
+    );
+
+    final passwordFieldFinder = find.widgetWithText(TextFormField, 'Password');
+    final passwordTextFieldFinder = find.descendant(
+      of: passwordFieldFinder,
+      matching: find.byType(TextField),
+    );
+    TextField passwordTextField = tester.widget<TextField>(
+      passwordTextFieldFinder,
+    );
+    expect(passwordTextField.obscureText, isTrue);
+
+    // Tap visibility toggle suffix icon
+    await tester.tap(find.byIcon(Icons.visibility_off_outlined));
+    await tester.pump();
+
+    passwordTextField = tester.widget<TextField>(passwordTextFieldFinder);
+    expect(passwordTextField.obscureText, isFalse);
+  });
+
+  testWidgets('login and signup buttons disabled while loading', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+    final cubit = AuthCubit(authRepo);
+    cubit.emit(AuthLoading());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider.value(value: cubit, child: const LoginScreen()),
+      ),
+    );
+    await tester.pump();
+
+    final loginButton = tester.widget<ElevatedButton>(
+      find.byType(ElevatedButton),
+    );
+    expect(loginButton.onPressed, isNull);
+
+    // Now test signup screen
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider.value(value: cubit, child: const SignupScreen()),
+      ),
+    );
+    await tester.pump();
+
+    final signupButton = tester.widget<ElevatedButton>(
+      find.byType(ElevatedButton),
+    );
+    expect(signupButton.onPressed, isNull);
+  });
+
+  testWidgets('keyboard submit triggers login', (WidgetTester tester) async {
+    final authRepo = FakeAuthRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider(
+          create: (_) => AuthCubit(authRepo),
+          child: const LoginScreen(),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email Address'),
+      'test@example.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Password'),
+      'password123',
+    );
+
+    final passwordFieldFinder = find.widgetWithText(TextFormField, 'Password');
+    final textField = tester.widget<TextField>(
+      find.descendant(
+        of: passwordFieldFinder,
+        matching: find.byType(TextField),
+      ),
+    );
+    textField.onSubmitted?.call('password123');
+    await tester.pumpAndSettle();
+
+    final authCubit = tester
+        .element(find.byType(LoginScreen))
+        .read<AuthCubit>();
+    expect(authCubit.state, isA<AuthError>());
+  });
+
+  testWidgets('app clears expired session and redirects to login', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+    authRepo.checkAuthUser = User(
+      id: 'user-123',
+      username: 'testuser',
+      email: 'test@example.com',
+      fullName: 'Test User',
+      role: 'athlete',
+      createdAt: DateTime(2026),
+      emailVerified: true,
+    );
+
+    final profileRepo = FakeProfileRepository();
+    final statsRepo = FakeStatsRepository();
+    final catalogRepo = FakeCatalogRepository();
+    final dropRepo = FakeDropRepository();
+    final scoutRepo = FakeScoutRepository();
+
+    final apiClient = ApiClient();
+
+    await tester.pumpWidget(
+      FormaApp(
+        apiClient: apiClient,
+        authRepository: authRepo,
+        profileRepository: profileRepo,
+        statsRepository: statsRepo,
+        catalogRepository: catalogRepo,
+        dropRepository: dropRepo,
+        scoutRepository: scoutRepo,
+      ),
+    );
+
+    // Initial load: splash screen
+    await tester.pump();
+    await tester.pumpAndSettle(const Duration(seconds: 3));
+
+    expect(find.byType(DashboardScreen), findsOneWidget);
+
+    // Simulate session expired call on apiClient
+    apiClient.onSessionExpired?.call();
+    await tester.pumpAndSettle();
+
+    // Verify redirected to LoginScreen and show friendly session expired message
+    expect(find.byType(DashboardScreen), findsNothing);
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.text('Session expired. Please log in again.'), findsOneWidget);
+  });
+
+  testWidgets('OtpScreen renders and handles submit and resend', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepositoryProvider<AuthRepository>.value(
+          value: authRepo,
+          child: BlocProvider(
+            create: (_) => AuthCubit(authRepo),
+            child: const OtpScreen(email: 'test@example.com'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Verify Email'), findsOneWidget);
+    expect(find.textContaining('test@example.com'), findsOneWidget);
+    expect(find.text('VERIFY EMAIL'), findsOneWidget);
+    expect(find.textContaining('Resend in 60s'), findsOneWidget);
+
+    // Enter invalid short code
+    await tester.enterText(find.byType(TextFormField), '123');
+    await tester.tap(find.text('VERIFY EMAIL'));
+    await tester.pump();
+    expect(find.text('Verification code must be 6 digits'), findsOneWidget);
+
+    // Enter correct length code
+    await tester.enterText(find.byType(TextFormField), '123456');
+    await tester.tap(find.text('VERIFY EMAIL'));
+    await tester.pump();
+
+    expect(authRepo.lastVerifiedEmail, 'test@example.com');
+    expect(authRepo.lastVerifiedOtp, '123456');
+  });
+
+  testWidgets('ForgotPasswordScreen submits email and opens reset screen', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        routes: {
+          '/reset-password': (_) =>
+              const Scaffold(body: Text('Reset Password Route')),
+        },
+        home: BlocProvider(
+          create: (_) => AuthCubit(authRepo),
+          child: const ForgotPasswordScreen(),
+        ),
+      ),
+    );
+
+    expect(find.text('Forgot Password'), findsOneWidget);
+    expect(find.text('SEND RESET CODE'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email Address'),
+      '  Reset@Example.com  ',
+    );
+    await tester.tap(find.text('SEND RESET CODE'));
+    await tester.pumpAndSettle();
+
+    expect(authRepo.lastForgotPasswordEmail, 'reset@example.com');
+    expect(find.text('Reset Password Route'), findsOneWidget);
+  });
+
+  testWidgets('ResetPasswordScreen validates and submits reset password', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        routes: {'/login': (_) => const Scaffold(body: Text('Login Route'))},
+        home: RepositoryProvider<AuthRepository>.value(
+          value: authRepo,
+          child: BlocProvider(
+            create: (_) => AuthCubit(authRepo),
+            child: const ResetPasswordScreen(email: 'reset@example.com'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Reset Password'), findsOneWidget);
+    expect(find.textContaining('reset@example.com'), findsOneWidget);
+    expect(find.text('RESET PASSWORD'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'New Password'),
+      'weakpass',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Confirm Password'),
+      'weakpass',
+    );
+    await tester.enterText(find.byType(TextFormField).first, '123456');
+    await tester.tap(find.text('RESET PASSWORD'));
+    await tester.pump();
+    expect(
+      find.text(
+        'Password must be at least 8 characters and include a letter and a number.',
+      ),
+      findsOneWidget,
+    );
+    expect(authRepo.lastResetEmail, isNull);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'New Password'),
+      'newpass123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Confirm Password'),
+      'different123',
+    );
+    await tester.tap(find.text('RESET PASSWORD'));
+    await tester.pump();
+    expect(find.text('Passwords do not match.'), findsOneWidget);
+    expect(authRepo.lastResetEmail, isNull);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Confirm Password'),
+      'newpass123',
+    );
+    await tester.tap(find.text('RESET PASSWORD'));
+    await tester.pumpAndSettle();
+
+    expect(authRepo.lastResetEmail, 'reset@example.com');
+    expect(authRepo.lastResetOtp, '123456');
+    expect(authRepo.lastNewPassword, 'newpass123');
+    expect(authRepo.lastConfirmPassword, 'newpass123');
+    expect(find.text('Login Route'), findsOneWidget);
+  });
+
+  testWidgets('unverified authenticated user is sent to OtpScreen', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+    authRepo.checkAuthUser = User(
+      id: 'user-123',
+      username: 'testuser',
+      email: 'test@example.com',
+      fullName: 'Test User',
+      role: 'athlete',
+      createdAt: DateTime(2026),
+      emailVerified: false,
+    );
+
+    final profileRepo = FakeProfileRepository();
+    final statsRepo = FakeStatsRepository();
+    final catalogRepo = FakeCatalogRepository();
+    final dropRepo = FakeDropRepository();
+    final scoutRepo = FakeScoutRepository();
+
+    await tester.pumpWidget(
+      FormaApp(
+        apiClient: ApiClient(),
+        authRepository: authRepo,
+        profileRepository: profileRepo,
+        statsRepository: statsRepo,
+        catalogRepository: catalogRepo,
+        dropRepository: dropRepo,
+        scoutRepository: scoutRepo,
+      ),
+    );
+
+    await tester.pump();
+    await tester.pumpAndSettle(const Duration(seconds: 3));
+
+    expect(find.byType(OtpScreen), findsOneWidget);
+    expect(find.byType(DashboardScreen), findsNothing);
+  });
+
+  testWidgets('verified authenticated user goes directly to DashboardScreen', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+    authRepo.checkAuthUser = User(
+      id: 'user-123',
+      username: 'testuser',
+      email: 'test@example.com',
+      fullName: 'Test User',
+      role: 'athlete',
+      createdAt: DateTime(2026),
+      emailVerified: true,
+    );
+
+    final profileRepo = FakeProfileRepository();
+    final statsRepo = FakeStatsRepository();
+    final catalogRepo = FakeCatalogRepository();
+    final dropRepo = FakeDropRepository();
+    final scoutRepo = FakeScoutRepository();
+
+    await tester.pumpWidget(
+      FormaApp(
+        apiClient: ApiClient(),
+        authRepository: authRepo,
+        profileRepository: profileRepo,
+        statsRepository: statsRepo,
+        catalogRepository: catalogRepo,
+        dropRepository: dropRepo,
+        scoutRepository: scoutRepo,
+      ),
+    );
+
+    await tester.pump();
+    await tester.pumpAndSettle(const Duration(seconds: 3));
+
+    expect(find.byType(DashboardScreen), findsOneWidget);
+    expect(find.byType(OtpScreen), findsNothing);
   });
 }

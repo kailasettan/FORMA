@@ -2,7 +2,7 @@ import enum
 from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, UniqueConstraint, func, text
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import CITEXT, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -51,6 +51,7 @@ class User(Base):
     focused_sport_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("sports.id", ondelete="SET NULL"), nullable=True
     )
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     player_profiles: Mapped[list["PlayerProfile"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -278,3 +279,22 @@ class MatchStat(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="match_stats")
+
+
+class EmailOTP(Base):
+    __tablename__ = "email_otps"
+    __table_args__ = (UniqueConstraint("user_id", "purpose", name="uq_email_otps_user_purpose"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    purpose: Mapped[str] = mapped_column(String, default="email_verification", nullable=False)
+    otp_hash: Mapped[str] = mapped_column(String, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_sent_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    user: Mapped[User] = relationship()

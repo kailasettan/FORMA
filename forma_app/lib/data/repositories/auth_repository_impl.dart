@@ -84,4 +84,59 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<String?> getToken() async {
     return await _apiClient.getToken();
   }
+
+  @override
+  Future<void> verifyOtp({required String email, required String otp}) async {
+    await _apiClient.post(
+      '/auth/verify-otp',
+      body: {'email': email, 'otp': otp},
+      authenticated: false,
+    );
+  }
+
+  @override
+  Future<void> resendOtp({required String email}) async {
+    await _apiClient.post(
+      '/auth/resend-otp',
+      body: {'email': email},
+      authenticated: false,
+    );
+  }
+
+  @override
+  Future<void> forgotPassword({required String email}) async {
+    await _apiClient.post(
+      '/auth/forgot-password',
+      body: {'email': email},
+      authenticated: false,
+    );
+  }
+
+  @override
+  Future<void> resendPasswordResetOtp({required String email}) async {
+    await _apiClient.post(
+      '/auth/resend-password-reset-otp',
+      body: {'email': email},
+      authenticated: false,
+    );
+  }
+
+  @override
+  Future<void> resetPassword({
+    required String email,
+    required String otp,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    await _apiClient.post(
+      '/auth/reset-password',
+      body: {
+        'email': email,
+        'otp': otp,
+        'new_password': newPassword,
+        'confirm_password': confirmPassword,
+      },
+      authenticated: false,
+    );
+  }
 }

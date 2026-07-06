@@ -16,22 +16,30 @@ class _SignupScreenState extends State<SignupScreen> {
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _fullNameController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _fullNameController.dispose();
     super.dispose();
   }
 
   void _submit() {
+    if (context.read<AuthCubit>().state is AuthLoading) return;
     if (_formKey.currentState!.validate()) {
+      if (_passwordController.text != _confirmPasswordController.text) {
+        return;
+      }
       context.read<AuthCubit>().signUp(
         username: _usernameController.text.trim(),
-        email: _emailController.text.trim(),
+        email: _emailController.text.trim().toLowerCase(),
         password: _passwordController.text,
         fullName: _fullNameController.text.trim(),
         role: 'athlete',
@@ -46,16 +54,32 @@ class _SignupScreenState extends State<SignupScreen> {
       body: BlocListener<AuthCubit, AuthState>(
         listener: (context, state) {
           if (state is AuthAuthenticated) {
-            // Success: clear navigation stack and go to dashboard
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              AppRouter.dashboard,
-              (route) => false,
-            );
+            if (!state.user.emailVerified) {
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                AppRouter.otpVerification,
+                (route) => false,
+                arguments: state.user.email,
+              );
+            } else {
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                AppRouter.dashboard,
+                (route) => false,
+              );
+            }
           } else if (state is AuthError) {
+            String displayMessage = state.message;
+            if (displayMessage.toLowerCase().contains('username is already taken') ||
+                displayMessage.toLowerCase().contains('username or email is already taken')) {
+              displayMessage = 'Username is already taken.';
+            } else if (displayMessage.toLowerCase().contains('email is already taken') ||
+                       displayMessage.toLowerCase().contains('email is already registered')) {
+              displayMessage = 'Email is already registered.';
+            }
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(state.message),
+                content: Text(displayMessage),
                 backgroundColor: AppTheme.error,
               ),
             );
@@ -93,6 +117,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     // Inputs
                     TextFormField(
                       controller: _fullNameController,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Full Name',
                         prefixIcon: Icon(Icons.person_outline),
@@ -104,9 +129,10 @@ class _SignupScreenState extends State<SignupScreen> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _usernameController,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Username',
                         prefixIcon: Icon(Icons.alternate_email_outlined),
@@ -124,10 +150,11 @@ class _SignupScreenState extends State<SignupScreen> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Email Address',
                         prefixIcon: Icon(Icons.email_outlined),
@@ -138,30 +165,78 @@ class _SignupScreenState extends State<SignupScreen> {
                         }
                         if (!RegExp(
                           r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                        ).hasMatch(value)) {
+                        ).hasMatch(value.trim())) {
                           return 'Please enter a valid email address';
                         }
                         return null;
                       },
                     ),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _passwordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
+                      obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
                         labelText: 'Password',
-                        prefixIcon: Icon(Icons.lock_outlined),
+                        prefixIcon: const Icon(Icons.lock_outlined),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                          },
+                        ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter a password';
                         }
-                        if (value.length < 8) {
-                          return 'Password must be at least 8 characters';
+                        if (value.length < 8 ||
+                            !RegExp(r'[a-zA-Z]').hasMatch(value) ||
+                            !RegExp(r'[0-9]').hasMatch(value)) {
+                          return 'Password must be at least 8 characters and include a letter and a number.';
                         }
                         return null;
                       },
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _confirmPasswordController,
+                      obscureText: _obscureConfirmPassword,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _submit(),
+                      decoration: InputDecoration(
+                        labelText: 'Confirm Password',
+                        prefixIcon: const Icon(Icons.lock_outlined),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureConfirmPassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscureConfirmPassword = !_obscureConfirmPassword;
+                            });
+                          },
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please confirm your password';
+                        }
+                        if (value != _passwordController.text) {
+                          return 'Passwords do not match.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 24),
 
                     // Submit
                     BlocBuilder<AuthCubit, AuthState>(

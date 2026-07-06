@@ -17,6 +17,7 @@ class UserModel extends User {
     super.preferredOpportunityTypes,
     super.role = 'athlete',
     super.focusedSportId,
+    super.emailVerified = true,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -43,6 +44,7 @@ class UserModel extends User {
           : null,
       role: (json['role'] as String?) ?? 'athlete',
       focusedSportId: json['focused_sport_id'] as String?,
+      emailVerified: json['email_verified'] as bool? ?? (json['emailVerified'] as bool? ?? true),
     );
   }
 
@@ -63,6 +65,7 @@ class UserModel extends User {
       'preferred_opportunity_types': preferredOpportunityTypes,
       'role': role,
       'focused_sport_id': focusedSportId,
+      'email_verified': emailVerified,
     };
   }
 }

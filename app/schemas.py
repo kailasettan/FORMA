@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.models import SkillLevel, Sport
 
@@ -47,6 +47,7 @@ class UserOut(BaseModel):
     preferred_opportunity_types: list[str] | None = None
     role: str
     focused_sport_id: UUID | None = None
+    email_verified: bool
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -62,10 +63,57 @@ class SignUpIn(BaseModel):
     full_name: str = Field(min_length=1)
     role: str = "athlete"  # athlete or scout
 
+    @field_validator("password")
+    @classmethod
+    def password_must_be_strong(cls, value: str) -> str:
+        if len(value) < 8 or not any(char.isalpha() for char in value) or not any(char.isdigit() for char in value):
+            raise ValueError("Password must be at least 8 characters and include a letter and a number.")
+        return value
+
 
 class LoginIn(BaseModel):
     email: EmailStr
     password: str
+
+
+class VerifyOTPIn(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class ResendOTPIn(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6)
+    new_password: str = Field(min_length=8)
+    confirm_password: str = Field(min_length=8)
+
+    @field_validator("otp")
+    @classmethod
+    def otp_must_be_digits(cls, value: str) -> str:
+        if not value.isdigit():
+            raise ValueError("Reset code must be 6 digits.")
+        return value
+
+    @field_validator("new_password")
+    @classmethod
+    def password_must_be_strong(cls, value: str) -> str:
+        if len(value) < 8 or not any(char.isalpha() for char in value) or not any(char.isdigit() for char in value):
+            raise ValueError("Password must be at least 8 characters and include a letter and a number.")
+        return value
+
+    @model_validator(mode="after")
+    def passwords_must_match(self) -> "ResetPasswordIn":
+        if self.new_password != self.confirm_password:
+            raise ValueError("Passwords do not match.")
+        return self
 
 
 class AuthOut(BaseModel):

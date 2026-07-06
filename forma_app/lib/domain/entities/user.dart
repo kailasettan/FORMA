@@ -18,6 +18,7 @@ class User extends Equatable {
   final List<String>? preferredOpportunityTypes;
   final String role;
   final String? focusedSportId;
+  final bool emailVerified;
 
   const User({
     required this.id,
@@ -35,6 +36,7 @@ class User extends Equatable {
     this.preferredOpportunityTypes,
     this.role = 'athlete',
     this.focusedSportId,
+    this.emailVerified = false,
   });
 
   @override
@@ -54,5 +56,6 @@ class User extends Equatable {
     preferredOpportunityTypes,
     role,
     focusedSportId,
+    emailVerified,
   ];
 }

@@ -15,6 +15,24 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final state = context.read<AuthCubit>().state;
+      if (state is AuthUnauthenticated && state.message != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(state.message!),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -24,9 +42,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _submit() {
+    if (context.read<AuthCubit>().state is AuthLoading) return;
     if (_formKey.currentState!.validate()) {
       context.read<AuthCubit>().login(
-        _emailController.text.trim(),
+        _emailController.text.trim().toLowerCase(),
         _passwordController.text,
       );
     }
@@ -39,10 +58,35 @@ class _LoginScreenState extends State<LoginScreen> {
         listener: (context, state) {
           if (state is AuthAuthenticated) {
             Navigator.pushReplacementNamed(context, AppRouter.dashboard);
+          } else if (state is AuthUnauthenticated) {
+            if (state.message != null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.message!),
+                  backgroundColor: AppTheme.error,
+                ),
+              );
+            }
           } else if (state is AuthError) {
+            String displayMessage = state.message;
+            if (displayMessage.toLowerCase().contains('email not verified')) {
+              Navigator.pushNamed(
+                context,
+                AppRouter.otpVerification,
+                arguments: _emailController.text.trim().toLowerCase(),
+              );
+              return;
+            }
+            if (displayMessage.toLowerCase().contains(
+                  'invalid email or password',
+                ) ||
+                displayMessage.toLowerCase().contains('invalid credentials') ||
+                displayMessage.toLowerCase().contains('401')) {
+              displayMessage = 'Invalid email or password.';
+            }
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(state.message),
+                content: Text(displayMessage),
                 backgroundColor: AppTheme.error,
               ),
             );
@@ -86,17 +130,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Email Address',
                         prefixIcon: Icon(Icons.email_outlined),
                       ),
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
+                        if (value == null || value.trim().isEmpty) {
                           return 'Please enter your email';
                         }
                         if (!RegExp(
                           r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                        ).hasMatch(value)) {
+                        ).hasMatch(value.trim())) {
                           return 'Please enter a valid email address';
                         }
                         return null;
@@ -105,10 +150,24 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 20),
                     TextFormField(
                       controller: _passwordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
+                      obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _submit(),
+                      decoration: InputDecoration(
                         labelText: 'Password',
-                        prefixIcon: Icon(Icons.lock_outlined),
+                        prefixIcon: const Icon(Icons.lock_outlined),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                          },
+                        ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
@@ -120,7 +179,19 @@ class _LoginScreenState extends State<LoginScreen> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 32),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.pushNamed(
+                            context,
+                            AppRouter.forgotPassword,
+                          );
+                        },
+                        child: const Text('Forgot password?'),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
 
                     // Action Button
                     BlocBuilder<AuthCubit, AuthState>(

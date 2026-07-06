@@ -17,6 +17,7 @@ from app.models import (
     SportCatalog,
     SportCategory,
     User,
+    EmailOTP,
 )
 from app.security import hash_password
 
@@ -102,6 +103,13 @@ def clean_tables():
     db.close()
 
 
+@pytest.fixture(autouse=True)
+def mock_send_email():
+    from unittest.mock import patch
+    with patch("app.routers.auth.send_otp_email") as mock:
+        yield mock
+
+
 # Override get_db dependency
 def override_get_db():
     db = TestingSessionLocal()
@@ -123,6 +131,7 @@ def create_test_user(username: str, role: str = "athlete") -> tuple[User, str]:
         password_hash=hash_password("password123"),
         full_name=f"{username.capitalize()} Test",
         role=role,
+        email_verified=True,
     )
     db.add(user)
     db.commit()
@@ -178,6 +187,621 @@ def test_signup_rejects_public_scout_role():
     try:
         user = db.scalar(select(User).where(User.username == "public_scout"))
         assert user is None
+    finally:
+        db.close()
+
+
+def test_password_is_hashed_not_stored_plain_text():
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": "hash_test_user",
+            "email": "hash_test@example.com",
+            "password": "my_secret_password_123",
+            "full_name": "Hash Test User",
+            "role": "athlete"
+        }
+    )
+    assert response.status_code == 201
+
+    db = TestingSessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.username == "hash_test_user"))
+        assert user is not None
+        assert user.password_hash != "my_secret_password_123"
+        # Verify it is indeed a bcrypt hash
+        from app.security import verify_password
+        assert verify_password("my_secret_password_123", user.password_hash)
+    finally:
+        db.close()
+
+
+def test_signup_duplicate_email_rejected():
+    # First signup
+    client.post(
+        "/auth/signup",
+        json={
+            "username": "unique_user1",
+            "email": "duplicate@example.com",
+            "password": "password123",
+            "full_name": "Unique One",
+            "role": "athlete"
+        }
+    )
+
+    # Second signup with same email, different username
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": "unique_user2",
+            "email": "duplicate@example.com",
+            "password": "password123",
+            "full_name": "Unique Two",
+            "role": "athlete"
+        }
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Email is already registered."
+
+
+def test_signup_duplicate_username_rejected():
+    # First signup
+    client.post(
+        "/auth/signup",
+        json={
+            "username": "duplicate_user",
+            "email": "user1@example.com",
+            "password": "password123",
+            "full_name": "User One",
+            "role": "athlete"
+        }
+    )
+
+    # Second signup with same username, different email
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": "duplicate_user",
+            "email": "user2@example.com",
+            "password": "password123",
+            "full_name": "User Two",
+            "role": "athlete"
+        }
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Username is already taken."
+
+
+def test_expired_token_returns_unauthorized():
+    from jose import jwt
+    from datetime import datetime, timedelta, timezone
+    from app.config import settings
+
+    # Create an expired token (expired 10 minutes ago)
+    expires_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    user_id = "00000000-0000-0000-0000-000000000000" # dummy uuid
+    expired_token = jwt.encode(
+        {"sub": user_id, "exp": expires_at},
+        settings.secret_key,
+        algorithm=settings.algorithm,
+    )
+
+    headers = {"Authorization": f"Bearer {expired_token}"}
+    response = client.get("/users/me", headers=headers)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or missing token"
+
+
+def test_signup_creates_unverified_user_and_sends_email():
+    from unittest.mock import patch
+    with patch("app.routers.auth.send_otp_email") as mock_send:
+        username = "unverified_test_user"
+        email = "unverified@example.com"
+
+        response = client.post(
+            "/auth/signup",
+            json={
+                "username": username,
+                "email": email,
+                "password": "password123",
+                "full_name": "Unverified User",
+                "role": "athlete"
+            }
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["user"]["email_verified"] is False
+
+        mock_send.assert_called_once()
+        assert mock_send.call_args[0][0] == email
+        otp = mock_send.call_args[0][1]
+        assert len(otp) == 6
+
+        db = TestingSessionLocal()
+        try:
+            user = db.scalar(select(User).where(User.username == username))
+            otp_entry = db.scalar(select(EmailOTP).where(EmailOTP.user_id == user.id))
+            assert otp_entry is not None
+            from app.security import verify_password
+            assert verify_password(otp, otp_entry.otp_hash)
+            assert otp_entry.attempts == 0
+        finally:
+            db.close()
+
+
+def test_correct_otp_verifies_user():
+    from unittest.mock import patch
+    username = "verify_test_user"
+    email = "verify@example.com"
+
+    with patch("app.routers.auth.send_otp_email") as mock_send:
+        client.post(
+            "/auth/signup",
+            json={
+                "username": username,
+                "email": email,
+                "password": "password123",
+                "full_name": "Verify User",
+                "role": "athlete"
+            }
+        )
+        otp = mock_send.call_args[0][1]
+
+        response = client.post(
+            "/auth/verify-otp",
+            json={
+                "email": email,
+                "otp": otp
+            }
+        )
+        assert response.status_code == 200
+        assert response.json()["message"] == "Email verified successfully."
+
+        db = TestingSessionLocal()
+        try:
+            user = db.scalar(select(User).where(User.username == username))
+            assert user.email_verified is True
+            otp_entry = db.scalar(select(EmailOTP).where(EmailOTP.user_id == user.id))
+            assert otp_entry is None
+        finally:
+            db.close()
+
+
+def test_wrong_otp_increment_attempts_and_fails():
+    from unittest.mock import patch
+    username = "wrong_otp_user"
+    email = "wrong_otp@example.com"
+
+    with patch("app.routers.auth.send_otp_email") as mock_send:
+        client.post(
+            "/auth/signup",
+            json={
+                "username": username,
+                "email": email,
+                "password": "password123",
+                "full_name": "Wrong OTP User",
+                "role": "athlete"
+            }
+        )
+
+        response = client.post(
+            "/auth/verify-otp",
+            json={
+                "email": email,
+                "otp": "000000"
+            }
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid verification code."
+
+        db = TestingSessionLocal()
+        try:
+            user = db.scalar(select(User).where(User.username == username))
+            otp_entry = db.scalar(select(EmailOTP).where(EmailOTP.user_id == user.id))
+            assert otp_entry.attempts == 1
+        finally:
+            db.close()
+
+
+def test_too_many_attempts_blocks_verification():
+    from unittest.mock import patch
+    username = "blocked_user"
+    email = "blocked@example.com"
+
+    with patch("app.routers.auth.send_otp_email") as mock_send:
+        client.post(
+            "/auth/signup",
+            json={
+                "username": username,
+                "email": email,
+                "password": "password123",
+                "full_name": "Blocked User",
+                "role": "athlete"
+            }
+        )
+
+        for _ in range(5):
+            response = client.post(
+                "/auth/verify-otp",
+                json={
+                    "email": email,
+                    "otp": "000000"
+                }
+            )
+            assert response.status_code == 400
+
+        response = client.post(
+            "/auth/verify-otp",
+            json={
+                "email": email,
+                "otp": "000000"
+            }
+        )
+        assert response.status_code == 400
+        assert "Too many failed attempts" in response.json()["detail"]
+
+
+def test_expired_otp_fails():
+    from unittest.mock import patch
+    from datetime import datetime, timedelta
+    username = "expired_user"
+    email = "expired@example.com"
+
+    with patch("app.routers.auth.send_otp_email") as mock_send:
+        client.post(
+            "/auth/signup",
+            json={
+                "username": username,
+                "email": email,
+                "password": "password123",
+                "full_name": "Expired User",
+                "role": "athlete"
+            }
+        )
+        otp = mock_send.call_args[0][1]
+
+        db = TestingSessionLocal()
+        try:
+            user = db.scalar(select(User).where(User.username == username))
+            otp_entry = db.scalar(select(EmailOTP).where(EmailOTP.user_id == user.id))
+            otp_entry.expires_at = datetime.utcnow() - timedelta(minutes=1)
+            db.commit()
+        finally:
+            db.close()
+
+        response = client.post(
+            "/auth/verify-otp",
+            json={
+                "email": email,
+                "otp": otp
+            }
+        )
+        assert response.status_code == 400
+        assert "expired" in response.json()["detail"].lower()
+
+
+def test_resend_otp_respects_cooldown():
+    from unittest.mock import patch
+    username = "cooldown_user"
+    email = "cooldown@example.com"
+
+    with patch("app.routers.auth.send_otp_email") as mock_send:
+        client.post(
+            "/auth/signup",
+            json={
+                "username": username,
+                "email": email,
+                "password": "password123",
+                "full_name": "Cooldown User",
+                "role": "athlete"
+            }
+        )
+        assert mock_send.call_count == 1
+
+        response = client.post(
+            "/auth/resend-otp",
+            json={
+                "email": email
+            }
+        )
+        assert response.status_code == 400
+        assert "wait 60 seconds" in response.json()["detail"].lower()
+        assert mock_send.call_count == 1
+
+        from datetime import datetime, timedelta
+        db = TestingSessionLocal()
+        try:
+            user = db.scalar(select(User).where(User.username == username))
+            otp_entry = db.scalar(select(EmailOTP).where(EmailOTP.user_id == user.id))
+            otp_entry.last_sent_at = datetime.utcnow() - timedelta(seconds=65)
+            db.commit()
+        finally:
+            db.close()
+
+        response = client.post(
+            "/auth/resend-otp",
+            json={
+                "email": email
+            }
+        )
+        assert response.status_code == 200
+        assert response.json()["message"] == "Verification code resent."
+        assert mock_send.call_count == 2
+
+
+def test_unverified_user_cannot_login_verified_user_can():
+    from unittest.mock import patch
+    username = "login_test_user"
+    email = "login_test@example.com"
+    password = "password123"
+
+    with patch("app.routers.auth.send_otp_email") as mock_send:
+        client.post(
+            "/auth/signup",
+            json={
+                "username": username,
+                "email": email,
+                "password": password,
+                "full_name": "Login Test User",
+                "role": "athlete"
+            }
+        )
+        otp = mock_send.call_args[0][1]
+
+        response = client.post(
+            "/auth/login",
+            json={
+                "email": email,
+                "password": password
+            }
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Email not verified."
+
+        client.post(
+            "/auth/verify-otp",
+            json={
+                "email": email,
+                "otp": otp
+            }
+        )
+
+        response = client.post(
+            "/auth/login",
+            json={
+                "email": email,
+                "password": password
+            }
+        )
+        assert response.status_code == 200
+        assert response.json()["user"]["email_verified"] is True
+
+
+def test_forgot_password_returns_safe_message_for_unknown_email(mock_send_email):
+    response = client.post(
+        "/auth/forgot-password",
+        json={"email": "missing@example.com"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "If an account exists, a reset code has been sent."
+    mock_send_email.assert_not_called()
+
+
+def test_forgot_password_sends_hashed_reset_otp_for_existing_email(mock_send_email):
+    user, _ = create_test_user("reset_existing")
+
+    response = client.post(
+        "/auth/forgot-password",
+        json={"email": user.email},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "If an account exists, a reset code has been sent."
+    mock_send_email.assert_called_once()
+    otp = mock_send_email.call_args[0][1]
+
+    db = TestingSessionLocal()
+    try:
+        otp_entry = db.scalar(
+            select(EmailOTP).where(
+                EmailOTP.user_id == user.id,
+                EmailOTP.purpose == "password_reset",
+            )
+        )
+        assert otp_entry is not None
+        assert otp_entry.otp_hash != otp
+        from app.security import verify_password
+        assert verify_password(otp, otp_entry.otp_hash)
+    finally:
+        db.close()
+
+
+def test_wrong_reset_otp_fails(mock_send_email):
+    user, _ = create_test_user("wrong_reset")
+    client.post("/auth/forgot-password", json={"email": user.email})
+
+    response = client.post(
+        "/auth/reset-password",
+        json={
+            "email": user.email,
+            "otp": "000000",
+            "new_password": "newpass123",
+            "confirm_password": "newpass123",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid or expired reset code."
+
+
+def test_expired_reset_otp_fails(mock_send_email):
+    from datetime import datetime, timedelta
+    user, _ = create_test_user("expired_reset")
+    client.post("/auth/forgot-password", json={"email": user.email})
+    otp = mock_send_email.call_args[0][1]
+
+    db = TestingSessionLocal()
+    try:
+        otp_entry = db.scalar(
+            select(EmailOTP).where(
+                EmailOTP.user_id == user.id,
+                EmailOTP.purpose == "password_reset",
+            )
+        )
+        otp_entry.expires_at = datetime.utcnow() - timedelta(minutes=1)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        "/auth/reset-password",
+        json={
+            "email": user.email,
+            "otp": otp,
+            "new_password": "newpass123",
+            "confirm_password": "newpass123",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid or expired reset code."
+
+
+def test_too_many_reset_attempts_blocks_reset(mock_send_email):
+    user, _ = create_test_user("blocked_reset")
+    client.post("/auth/forgot-password", json={"email": user.email})
+    otp = mock_send_email.call_args[0][1]
+
+    for _ in range(5):
+        response = client.post(
+            "/auth/reset-password",
+            json={
+                "email": user.email,
+                "otp": "000000",
+                "new_password": "newpass123",
+                "confirm_password": "newpass123",
+            },
+        )
+        assert response.status_code == 400
+
+    response = client.post(
+        "/auth/reset-password",
+        json={
+            "email": user.email,
+            "otp": otp,
+            "new_password": "newpass123",
+            "confirm_password": "newpass123",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Too many failed attempts" in response.json()["detail"]
+
+
+def test_resend_reset_otp_respects_cooldown(mock_send_email):
+    from datetime import datetime, timedelta
+    user, _ = create_test_user("reset_cooldown")
+    client.post("/auth/forgot-password", json={"email": user.email})
+    assert mock_send_email.call_count == 1
+
+    response = client.post(
+        "/auth/resend-password-reset-otp",
+        json={"email": user.email},
+    )
+    assert response.status_code == 400
+    assert "wait 60 seconds" in response.json()["detail"].lower()
+    assert mock_send_email.call_count == 1
+
+    db = TestingSessionLocal()
+    try:
+        otp_entry = db.scalar(
+            select(EmailOTP).where(
+                EmailOTP.user_id == user.id,
+                EmailOTP.purpose == "password_reset",
+            )
+        )
+        otp_entry.last_sent_at = datetime.utcnow() - timedelta(seconds=65)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        "/auth/resend-password-reset-otp",
+        json={"email": user.email},
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == "If an account exists, a reset code has been sent."
+    assert mock_send_email.call_count == 2
+
+
+def test_reset_password_rejects_weak_or_mismatched_password(mock_send_email):
+    user, _ = create_test_user("reset_validation")
+    client.post("/auth/forgot-password", json={"email": user.email})
+    otp = mock_send_email.call_args[0][1]
+
+    weak_response = client.post(
+        "/auth/reset-password",
+        json={
+            "email": user.email,
+            "otp": otp,
+            "new_password": "weakpass",
+            "confirm_password": "weakpass",
+        },
+    )
+    assert weak_response.status_code == 422
+
+    mismatch_response = client.post(
+        "/auth/reset-password",
+        json={
+            "email": user.email,
+            "otp": otp,
+            "new_password": "newpass123",
+            "confirm_password": "otherpass123",
+        },
+    )
+    assert mismatch_response.status_code == 422
+
+
+def test_correct_reset_otp_resets_password_and_invalidates_old_password(mock_send_email):
+    user, _ = create_test_user("reset_success")
+    client.post("/auth/forgot-password", json={"email": user.email})
+    otp = mock_send_email.call_args[0][1]
+
+    response = client.post(
+        "/auth/reset-password",
+        json={
+            "email": user.email,
+            "otp": otp,
+            "new_password": "newpass123",
+            "confirm_password": "newpass123",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == "Password reset successfully."
+
+    old_login = client.post(
+        "/auth/login",
+        json={"email": user.email, "password": "password123"},
+    )
+    assert old_login.status_code == 401
+
+    new_login = client.post(
+        "/auth/login",
+        json={"email": user.email, "password": "newpass123"},
+    )
+    assert new_login.status_code == 200
+
+    db = TestingSessionLocal()
+    try:
+        otp_entry = db.scalar(
+            select(EmailOTP).where(
+                EmailOTP.user_id == user.id,
+                EmailOTP.purpose == "password_reset",
+            )
+        )
+        assert otp_entry is None
     finally:
         db.close()
 

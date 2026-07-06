@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'presentation/screens/auth/otp_screen.dart';
 import 'data/api_client.dart';
 import 'data/api_config.dart';
 import 'data/repositories/auth_repository_impl.dart';
@@ -51,6 +52,7 @@ void main() {
 
   runApp(
     FormaApp(
+      apiClient: apiClient,
       authRepository: authRepository,
       profileRepository: profileRepository,
       statsRepository: statsRepository,
@@ -88,6 +90,7 @@ class ConfigErrorApp extends StatelessWidget {
 }
 
 class FormaApp extends StatelessWidget {
+  final ApiClient apiClient;
   final AuthRepository authRepository;
   final ProfileRepository profileRepository;
   final StatsRepository statsRepository;
@@ -97,6 +100,7 @@ class FormaApp extends StatelessWidget {
 
   const FormaApp({
     super.key,
+    required this.apiClient,
     required this.authRepository,
     required this.profileRepository,
     required this.statsRepository,
@@ -119,7 +123,13 @@ class FormaApp extends StatelessWidget {
       child: MultiBlocProvider(
         providers: [
           BlocProvider<AuthCubit>(
-            create: (context) => AuthCubit(authRepository),
+            create: (context) {
+              final cubit = AuthCubit(authRepository);
+              apiClient.onSessionExpired = () {
+                cubit.sessionExpired();
+              };
+              return cubit;
+            },
           ),
           BlocProvider<ProfileCubit>(
             create: (context) => ProfileCubit(profileRepository),
@@ -197,9 +207,17 @@ class _AuthGateState extends State<AuthGate> {
       );
     }
 
-    return BlocBuilder<AuthCubit, AuthState>(
+    return BlocConsumer<AuthCubit, AuthState>(
+      listener: (context, state) {
+        if (state is AuthUnauthenticated) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      },
       builder: (context, state) {
         if (state is AuthAuthenticated) {
+          if (!state.user.emailVerified) {
+            return OtpScreen(email: state.user.email);
+          }
           return const DashboardScreen();
         } else if (state is AuthUnauthenticated) {
           return const LoginScreen();
