@@ -137,8 +137,8 @@ class Drop(Base):
     player_profile_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("player_profiles.id", ondelete="SET NULL"), nullable=True
     )
-    sport_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("sports.id", ondelete="CASCADE"), nullable=False, index=True
+    sport_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("sports.id", ondelete="SET NULL"), nullable=True, index=True
     )
     category_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("sport_categories.id", ondelete="SET NULL"), nullable=True
@@ -156,6 +156,8 @@ class Drop(Base):
     bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     moderation_status: Mapped[str] = mapped_column(String, default="approved", nullable=False)
     visibility: Mapped[str] = mapped_column(String, default="public", nullable=False)
+    audience: Mapped[str | None] = mapped_column(String, default="public", nullable=True)
+    location: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )
@@ -267,10 +269,10 @@ class MatchStat(Base):
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    sport: Mapped[Sport] = mapped_column(Enum(Sport, name="sport_enum"), nullable=False)
+    sport: Mapped[Sport | None] = mapped_column(Enum(Sport, name="sport_enum"), nullable=True)
     date: Mapped[date] = mapped_column(Date, nullable=False)
     opponent: Mapped[str] = mapped_column(String, nullable=False)
-    stats: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    stats: Mapped[dict[str, int] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )

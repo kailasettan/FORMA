@@ -135,22 +135,24 @@ class DropCreateIn(BaseModel):
     public_id: str = Field(min_length=1)
     playback_url: str = Field(min_length=1)
     thumbnail_url: str | None = None
-    duration_seconds: float = Field(gt=0)
+    duration_seconds: float = Field(default=0.0, ge=0)
     width: int | None = None
     height: int | None = None
     format: str = Field(min_length=1)
     bytes: int = Field(gt=0)
-    sport_id: UUID
+    sport_id: UUID | None = None
     category_id: UUID | None = None
     caption: str | None = None
     visibility: str = "public"
+    audience: str | None = "public"
+    location: str | None = None
 
     @field_validator("format")
     @classmethod
     def format_must_be_supported(cls, value: str) -> str:
         normalized = value.lower().strip()
-        if normalized not in {"mp4", "mov", "webm"}:
-            raise ValueError("format must be one of: mp4, mov, webm")
+        if normalized not in {"mp4", "mov", "webm", "jpg", "jpeg", "png", "webp"}:
+            raise ValueError("format must be one of: mp4, mov, webm, jpg, jpeg, png, webp")
         return normalized
 
     @field_validator("visibility")
@@ -161,12 +163,22 @@ class DropCreateIn(BaseModel):
             raise ValueError("visibility must be one of: public, private")
         return normalized
 
+    @field_validator("audience")
+    @classmethod
+    def audience_must_be_supported(cls, value: str | None) -> str | None:
+        if value is None:
+            return "public"
+        normalized = value.lower().strip()
+        if normalized not in {"public", "followers"}:
+            raise ValueError("audience must be one of: public, followers")
+        return normalized
+
 
 class DropOut(BaseModel):
     id: UUID
     user_id: UUID
     player_profile_id: UUID | None
-    sport_id: UUID
+    sport_id: UUID | None
     category_id: UUID | None
     provider: str
     provider_asset_id: str
@@ -181,6 +193,8 @@ class DropOut(BaseModel):
     bytes: int
     moderation_status: str
     visibility: str
+    audience: str | None = None
+    location: str | None = None
     created_at: datetime
     updated_at: datetime
     
@@ -246,14 +260,16 @@ class PublicAthleteProfileOut(BaseModel):
 
 # Legacy Match Stats Schemas (kept for compile-time safety and migration)
 class MatchStatCreateIn(BaseModel):
-    sport: Sport
+    sport: Sport | None = None
     date: date
     opponent: str = Field(min_length=1)
-    stats: dict[str, int]
+    stats: dict[str, int] | None = None
 
     @field_validator("stats")
     @classmethod
-    def stats_values_must_be_non_negative(cls, stats: dict[str, int]) -> dict[str, int]:
+    def stats_values_must_be_non_negative(cls, stats: dict[str, int] | None) -> dict[str, int] | None:
+        if stats is None:
+            return None
         for key, value in stats.items():
             if value < 0:
                 raise ValueError(f"{key} must be non-negative")
@@ -263,10 +279,10 @@ class MatchStatCreateIn(BaseModel):
 class MatchStatOut(BaseModel):
     id: UUID
     user_id: UUID
-    sport: Sport
+    sport: Sport | None = None
     date: date
     opponent: str
-    stats: dict[str, int]
+    stats: dict[str, int] | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

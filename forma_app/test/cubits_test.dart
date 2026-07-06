@@ -105,10 +105,12 @@ class FakeDropRepository implements DropRepository {
     int? height,
     required String format,
     required int bytes,
-    required String sportId,
+    String? sportId,
     String? categoryId,
     String? caption,
     String visibility = 'public',
+    String? audience,
+    String? location,
   }) async {
     publishCount++;
     if (publishError != null) throw publishError!;

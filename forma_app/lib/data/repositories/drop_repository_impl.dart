@@ -134,10 +134,12 @@ class DropRepositoryImpl implements DropRepository {
     int? height,
     required String format,
     required int bytes,
-    required String sportId,
+    String? sportId,
     String? categoryId,
     String? caption,
     String visibility = 'public',
+    String? audience,
+    String? location,
   }) async {
     final payload = {
       'provider_asset_id': providerAssetId,
@@ -153,6 +155,8 @@ class DropRepositoryImpl implements DropRepository {
       'category_id': categoryId,
       'caption': caption,
       'visibility': visibility,
+      'audience': audience,
+      'location': location,
     };
     _debugCheckpoint('POST /drops start');
     _debugPostDropsPayload(payload);

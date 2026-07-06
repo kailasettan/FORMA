@@ -21,10 +21,12 @@ abstract class DropRepository {
     int? height,
     required String format,
     required int bytes,
-    required String sportId,
+    String? sportId,
     String? categoryId,
     String? caption,
-    String visibility,
+    String visibility = 'public',
+    String? audience,
+    String? location,
   });
 
   Future<List<Drop>> getUserDrops(String userId);

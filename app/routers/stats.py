@@ -18,7 +18,9 @@ SPORT_STAT_FIELDS: dict[Sport, set[str]] = {
 }
 
 
-def validate_stat_keys(sport: Sport, stats: dict[str, int]) -> None:
+def validate_stat_keys(sport: Sport | None, stats: dict[str, int] | None) -> None:
+    if sport is None or stats is None:
+        return
     unknown_keys = set(stats) - SPORT_STAT_FIELDS[sport]
     if unknown_keys:
         raise HTTPException(

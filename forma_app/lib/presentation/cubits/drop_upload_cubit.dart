@@ -130,10 +130,12 @@ class PendingDropPublish {
   final int? height;
   final String format;
   final int bytes;
-  final String sportId;
+  final String? sportId;
   final String? categoryId;
   final String? caption;
   final String visibility;
+  final String? audience;
+  final String? location;
 
   const PendingDropPublish({
     required this.providerAssetId,
@@ -145,10 +147,12 @@ class PendingDropPublish {
     required this.height,
     required this.format,
     required this.bytes,
-    required this.sportId,
-    required this.categoryId,
-    required this.caption,
+    this.sportId,
+    this.categoryId,
+    this.caption,
     required this.visibility,
+    this.audience,
+    this.location,
   });
 }
 
@@ -160,6 +164,8 @@ class DropUploadCubit extends Cubit<DropUploadState> {
   String? _lastCategoryId;
   String? _lastCaption;
   String? _lastVisibility;
+  String? _lastAudience;
+  String? _lastLocation;
   PendingDropPublish? _pendingPublish;
   int _operationId = 0;
 
@@ -167,9 +173,11 @@ class DropUploadCubit extends Cubit<DropUploadState> {
 
   Future<void> uploadDrop({
     required File file,
-    required String sportId,
+    String? sportId,
     String? categoryId,
     String? caption,
+    String? location,
+    String? audience,
     required String visibility,
   }) async {
     if (state.isActive) return;
@@ -178,6 +186,8 @@ class DropUploadCubit extends Cubit<DropUploadState> {
     _lastCategoryId = categoryId;
     _lastCaption = caption;
     _lastVisibility = visibility;
+    _lastAudience = audience;
+    _lastLocation = location;
     _pendingPublish = null;
     final operationId = ++_operationId;
 
@@ -210,6 +220,8 @@ class DropUploadCubit extends Cubit<DropUploadState> {
         categoryId: categoryId,
         caption: caption,
         visibility: visibility,
+        audience: audience,
+        location: location,
       );
 
       await _publishPending(operationId: operationId);
@@ -227,14 +239,15 @@ class DropUploadCubit extends Cubit<DropUploadState> {
 
   Future<void> retryUpload() async {
     final file = _lastFile;
-    final sportId = _lastSportId;
     final visibility = _lastVisibility;
-    if (file == null || sportId == null || visibility == null) return;
+    if (file == null || visibility == null) return;
     await uploadDrop(
       file: file,
-      sportId: sportId,
+      sportId: _lastSportId,
       categoryId: _lastCategoryId,
       caption: _lastCaption,
+      location: _lastLocation,
+      audience: _lastAudience,
       visibility: visibility,
     );
   }
@@ -265,6 +278,8 @@ class DropUploadCubit extends Cubit<DropUploadState> {
         categoryId: pending.categoryId,
         caption: pending.caption,
         visibility: pending.visibility,
+        audience: pending.audience,
+        location: pending.location,
       );
       if (!_isCurrentOperation(operationId)) return;
       _debugCheckpoint('drop created');
@@ -313,24 +328,32 @@ class DropUploadCubit extends Cubit<DropUploadState> {
 
   PendingDropPublish _buildPendingPublish(
     Map<String, dynamic> cloudinaryResponse, {
-    required String sportId,
+    required String? sportId,
     required String? categoryId,
     required String? caption,
+    required String? location,
+    required String? audience,
     required String visibility,
   }) {
     _validateCloudinaryResponse(cloudinaryResponse);
     final publicId = cloudinaryResponse['public_id'] as String;
     final playbackUrl = cloudinaryResponse['secure_url'] as String;
     final providerAssetId = cloudinaryResponse['asset_id'] as String;
-    final duration = (cloudinaryResponse['duration'] as num).toDouble();
+    final duration = cloudinaryResponse['duration'] != null
+        ? (cloudinaryResponse['duration'] as num).toDouble()
+        : 0.0;
     final width = cloudinaryResponse['width'] as int?;
     final height = cloudinaryResponse['height'] as int?;
     final format = cloudinaryResponse['format'] as String;
     final bytes = cloudinaryResponse['bytes'] as int;
-    final thumbnailUrl = playbackUrl.replaceAll(
-      RegExp(r'\.(mp4|mov|webm)(\?.*)?$', caseSensitive: false),
-      '.jpg',
-    );
+
+    final isImage = cloudinaryResponse['resource_type'] == 'image';
+    final thumbnailUrl = isImage
+        ? playbackUrl
+        : playbackUrl.replaceAll(
+            RegExp(r'\.(mp4|mov|webm)(\?.*)?$', caseSensitive: false),
+            '.jpg',
+          );
 
     return PendingDropPublish(
       providerAssetId: providerAssetId,
@@ -346,6 +369,8 @@ class DropUploadCubit extends Cubit<DropUploadState> {
       categoryId: categoryId,
       caption: caption,
       visibility: visibility,
+      audience: audience,
+      location: location,
     );
   }
 
@@ -358,17 +383,19 @@ class DropUploadCubit extends Cubit<DropUploadState> {
       'secure_url',
       'format',
       'bytes',
-      'duration',
     ]) {
       if (json[field] == null) missingFields.add(field);
+    }
+    if (json['resource_type'] == 'video' && json['duration'] == null) {
+      missingFields.add('duration');
     }
     if (missingFields.isNotEmpty) {
       throw Exception(
         'Cloudinary upload response was missing: ${missingFields.join(', ')}.',
       );
     }
-    if (json['resource_type'] != 'video') {
-      throw Exception('Cloudinary rejected the upload: asset is not a video.');
+    if (json['resource_type'] != 'video' && json['resource_type'] != 'image') {
+      throw Exception('Cloudinary rejected the upload: asset is not a video or image.');
     }
   }
 

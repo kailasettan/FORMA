@@ -7,7 +7,7 @@ class Drop extends Equatable {
   final String id;
   final String userId;
   final String? playerProfileId;
-  final String sportId;
+  final String? sportId;
   final String? categoryId;
   final String provider;
   final String providerAssetId;
@@ -22,6 +22,8 @@ class Drop extends Equatable {
   final int bytes;
   final String moderationStatus;
   final String visibility;
+  final String? audience;
+  final String? location;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -37,7 +39,7 @@ class Drop extends Equatable {
     required this.id,
     required this.userId,
     this.playerProfileId,
-    required this.sportId,
+    this.sportId,
     this.categoryId,
     required this.provider,
     required this.providerAssetId,
@@ -52,6 +54,8 @@ class Drop extends Equatable {
     required this.bytes,
     required this.moderationStatus,
     required this.visibility,
+    this.audience,
+    this.location,
     required this.createdAt,
     required this.updatedAt,
     this.propsCount = 0,
@@ -82,6 +86,8 @@ class Drop extends Equatable {
     bytes,
     moderationStatus,
     visibility,
+    audience,
+    location,
     createdAt,
     updatedAt,
     propsCount,
@@ -117,6 +123,8 @@ class Drop extends Equatable {
       bytes: bytes,
       moderationStatus: moderationStatus,
       visibility: visibility,
+      audience: audience,
+      location: location,
       createdAt: createdAt,
       updatedAt: updatedAt,
       propsCount: propsCount ?? this.propsCount,

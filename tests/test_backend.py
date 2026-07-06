@@ -327,6 +327,59 @@ def test_drop_creation_verifies_cloudinary_metadata():
     assert drop_data["id"] in {drop["id"] for drop in feed.json()["items"]}
 
 
+def test_create_drop_without_sport_or_category():
+    athlete, token = create_test_user("athlete_a")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    payload = {
+        "provider_asset_id": "asset_social",
+        "public_id": "forma/skill_clips/drop_social",
+        "playback_url": "https://res.cloudinary.com/nyuzzi3x/video/upload/v1/drop_social.mp4",
+        "thumbnail_url": "https://res.cloudinary.com/nyuzzi3x/video/upload/v1/drop_social.jpg",
+        "duration_seconds": 12.0,
+        "width": 1080,
+        "height": 1920,
+        "format": "mp4",
+        "bytes": 1024 * 500,
+        "caption": "Social first drop!",
+        "audience": "followers",
+        "location": "New York"
+    }
+
+    # Successful creation without sport or category
+    response = client.post("/drops", json=payload, headers=headers)
+    assert response.status_code == 201
+    drop_data = response.json()
+    assert drop_data["sport_id"] is None
+    assert drop_data["category_id"] is None
+    assert drop_data["audience"] == "followers"
+    assert drop_data["location"] == "New York"
+
+    # Default audience check (null/missing defaults to public)
+    db = TestingSessionLocal()
+    from app.models import Drop
+    null_aud_drop = Drop(
+        user_id=athlete.id,
+        provider_asset_id="asset_null_aud",
+        public_id="drop_null_aud",
+        playback_url="url",
+        duration_seconds=10,
+        format="mp4",
+        bytes=1000,
+        visibility="public",
+        audience=None
+    )
+    db.add(null_aud_drop)
+    db.commit()
+    db.refresh(null_aud_drop)
+    null_aud_drop_id = str(null_aud_drop.id)
+    db.close()
+
+    response2 = client.get(f"/drops/{null_aud_drop_id}", headers=headers)
+    assert response2.status_code == 200
+    assert response2.json()["audience"] == "public"
+
+
 def test_drop_creation_validation_limits():
     athlete, token = create_test_user("athlete_a")
     headers = {"Authorization": f"Bearer {token}"}

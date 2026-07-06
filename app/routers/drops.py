@@ -41,9 +41,16 @@ MAX_FEED_LIMIT = 25
 
 def hydrate_drop(drop: Drop, db: Session, current_user: User | None = None) -> Drop:
     drop.user = db.get(User, drop.user_id)
-    drop.sport = db.get(SportCatalog, drop.sport_id)
+    if drop.sport_id:
+        drop.sport = db.get(SportCatalog, drop.sport_id)
+    else:
+        drop.sport = None
     if drop.category_id:
         drop.category = db.get(SportCategory, drop.category_id)
+    else:
+        drop.category = None
+    if drop.audience is None:
+        drop.audience = "public"
     drop.props_count = db.scalar(select(func.count(DropProp.id)).where(DropProp.drop_id == drop.id)) or 0
     drop.comments_count = db.scalar(
         select(func.count(DropComment.id)).where(
@@ -204,13 +211,20 @@ def create_drop(
         )
 
     # 2. Check if sport exists
-    sport = db.get(SportCatalog, payload.sport_id)
-    if not sport:
-        record_orphaned_cloudinary_asset(payload, current_user, db, "sport_not_found")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sport not found")
+    if payload.sport_id:
+        sport = db.get(SportCatalog, payload.sport_id)
+        if not sport:
+            record_orphaned_cloudinary_asset(payload, current_user, db, "sport_not_found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sport not found")
 
     # 3. Check if category exists
     if payload.category_id:
+        if not payload.sport_id:
+            record_orphaned_cloudinary_asset(payload, current_user, db, "invalid_sport_category")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Sport is required if category is specified",
+            )
         category = db.get(SportCategory, payload.category_id)
         if not category or category.sport_id != payload.sport_id:
             record_orphaned_cloudinary_asset(
@@ -235,7 +249,8 @@ def create_drop(
 
     if is_testing:
         # In test mode, we do local schema validations of payload duration & size
-        if payload.duration_seconds > 60.0:
+        is_video = payload.format not in {"jpg", "jpeg", "png", "webp"}
+        if is_video and payload.duration_seconds > 60.0:
             record_orphaned_cloudinary_asset(payload, current_user, db, "duration_limit")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -247,11 +262,11 @@ def create_drop(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Video size exceeds the 50 MB limit.",
             )
-        if payload.format not in ["mp4", "mov", "webm"]:
+        if payload.format not in {"mp4", "mov", "webm", "jpg", "jpeg", "png", "webp"}:
             record_orphaned_cloudinary_asset(payload, current_user, db, "unsupported_format")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Unsupported video format.",
+                detail="Unsupported video/image format.",
             )
     else:
         # Prod validation against actual Cloudinary API
@@ -265,24 +280,24 @@ def create_drop(
         # Validations on metadata returned by Cloudinary
         resource_type = metadata.get("resource_type")
         asset_format = metadata.get("format")
-        duration = float(metadata.get("duration", 0))
+        duration = float(metadata.get("duration", 0)) if metadata.get("duration") is not None else 0.0
         bytes_size = int(metadata.get("bytes", 0))
 
-        if resource_type != "video":
-            record_orphaned_cloudinary_asset(payload, current_user, db, "resource_not_video")
+        if resource_type not in ["video", "image"]:
+            record_orphaned_cloudinary_asset(payload, current_user, db, "resource_not_supported")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Resource must be a video.",
+                detail="Resource must be a video or image.",
             )
 
-        if asset_format not in ["mp4", "mov", "webm"]:
+        if asset_format not in ["mp4", "mov", "webm", "jpg", "jpeg", "png", "webp"]:
             record_orphaned_cloudinary_asset(payload, current_user, db, "unsupported_format")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Unsupported video format.",
+                detail="Unsupported media format.",
             )
 
-        if duration > 60.0:
+        if resource_type == "video" and duration > 60.0:
             record_orphaned_cloudinary_asset(payload, current_user, db, "duration_limit")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -293,17 +308,19 @@ def create_drop(
             record_orphaned_cloudinary_asset(payload, current_user, db, "bytes_limit")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Video size exceeds the 50 MB limit.",
+                detail="Video/image size exceeds the 50 MB limit.",
             )
 
     # 5. Look up player profile to link it if exists
-    profile = db.scalar(
-        select(PlayerProfile).where(
-            (PlayerProfile.user_id == current_user.id)
-            & (PlayerProfile.sport_id == payload.sport_id)
+    profile_id = None
+    if payload.sport_id:
+        profile = db.scalar(
+            select(PlayerProfile).where(
+                (PlayerProfile.user_id == current_user.id)
+                & (PlayerProfile.sport_id == payload.sport_id)
+            )
         )
-    )
-    profile_id = profile.id if profile else None
+        profile_id = profile.id if profile else None
 
     # 6. Save drop record
     drop = Drop(
@@ -324,6 +341,8 @@ def create_drop(
         bytes=payload.bytes,
         visibility=payload.visibility,
         moderation_status="approved",
+        audience=payload.audience,
+        location=payload.location,
     )
     db.add(drop)
     try:
