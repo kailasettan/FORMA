@@ -11,6 +11,7 @@ import '../../cubits/catalog_cubit.dart';
 import '../../theme.dart';
 import '../../widgets/avatar_image.dart';
 import 'profile_dropdown_safety.dart';
+import 'profile_photo_validation.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final User user;
@@ -90,10 +91,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
     if (file == null || !mounted) return;
 
-    if (!_isAllowedProfileImage(file.path)) {
+    final selectedFile = File(file.path);
+    final isValidPhoto = await isValidProfilePhotoFile(selectedFile);
+    if (!mounted) return;
+    if (!isValidPhoto) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please choose a JPG, PNG, or WEBP image.'),
+          content: Text(profilePhotoValidationMessage),
           backgroundColor: AppTheme.error,
         ),
       );
@@ -101,7 +105,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
 
     setState(() {
-      _selectedProfilePhotoFile = File(file.path);
+      _selectedProfilePhotoFile = selectedFile;
     });
   }
 
@@ -110,14 +114,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (selectedFile != null) return FileImage(selectedFile);
 
     return avatarImageProvider(widget.user.profilePhotoUrl);
-  }
-
-  bool _isAllowedProfileImage(String path) {
-    final lower = path.toLowerCase();
-    return lower.endsWith('.jpg') ||
-        lower.endsWith('.jpeg') ||
-        lower.endsWith('.png') ||
-        lower.endsWith('.webp');
   }
 
   void _submit() async {
@@ -140,6 +136,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         var profilePhotoUrl = widget.user.profilePhotoUrl;
         final selectedPhotoFile = _selectedProfilePhotoFile;
         if (selectedPhotoFile != null) {
+          if (!await isValidProfilePhotoFile(selectedPhotoFile)) {
+            throw const FormatException(profilePhotoValidationMessage);
+          }
           final signature = await profileRepo.getProfilePhotoUploadSignature();
           final cloudinaryResponse = await profileRepo
               .uploadProfilePhotoToCloudinary(
@@ -187,11 +186,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           setState(() {
             _isSaving = false;
           });
+          final message = e is FormatException
+              ? e.message
+              : 'Failed to update profile: $e';
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to update profile: $e'),
-              backgroundColor: AppTheme.error,
-            ),
+            SnackBar(content: Text(message), backgroundColor: AppTheme.error),
           );
         }
       }

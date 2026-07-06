@@ -221,15 +221,17 @@ def test_profile_photo_upload_signature_requires_auth():
 
 
 def test_profile_photo_upload_signature_excludes_api_secret():
-    _, token = create_test_user("athlete_a")
+    user, token = create_test_user("athlete_a")
     headers = {"Authorization": f"Bearer {token}"}
 
     response = client.post("/uploads/profile-photo/signature", headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["folder"] == "forma/profile_photos"
-    assert data["upload_preset"] == "forma_profile_photos"
+    assert "upload_preset" not in data or data["upload_preset"] is None
     assert data["resource_type"] == "image"
+    assert data["allowed_formats"] == "jpg,jpeg,png,webp"
+    assert data["public_id"] == f"profile_{user.id}"
     assert "signature" in data
     assert "timestamp" in data
     assert "api_secret" not in data

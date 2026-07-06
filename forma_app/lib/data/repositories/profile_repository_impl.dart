@@ -92,11 +92,13 @@ class ProfileRepositoryImpl implements ProfileRepository {
     final request = http.MultipartRequest('POST', url)
       ..fields['api_key'] = signatureData['api_key'] as String
       ..fields['timestamp'] = signatureData['timestamp'].toString()
-      ..fields['signature'] = signatureData['signature'] as String
-      ..fields['upload_preset'] = signatureData['upload_preset'] as String
-      ..fields['folder'] = signatureData['folder'] as String
-      ..fields['overwrite'] = signatureData['overwrite'] as String
-      ..fields['unique_filename'] = signatureData['unique_filename'] as String;
+      ..fields['signature'] = signatureData['signature'] as String;
+
+    _addStringField(request, signatureData, 'folder');
+    _addStringField(request, signatureData, 'overwrite');
+    _addStringField(request, signatureData, 'unique_filename');
+    _addStringField(request, signatureData, 'public_id');
+    _addStringField(request, signatureData, 'allowed_formats');
 
     final length = await file.length();
     request.files.add(
@@ -104,7 +106,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
         'file',
         http.ByteStream(file.openRead()),
         length,
-        filename: file.path.split('/').last,
+        filename: 'profile_photo',
       ),
     );
 
@@ -228,6 +230,17 @@ class ProfileRepositoryImpl implements ProfileRepository {
         json['public_id'] is! String ||
         (json['public_id'] as String).isEmpty) {
       throw ApiException('Cloudinary returned malformed image metadata.');
+    }
+  }
+
+  void _addStringField(
+    http.MultipartRequest request,
+    Map<String, dynamic> source,
+    String key,
+  ) {
+    final value = source[key];
+    if (value is String && value.isNotEmpty) {
+      request.fields[key] = value;
     }
   }
 

@@ -22,22 +22,25 @@ def get_profile_photo_upload_signature(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     timestamp = int(time.time())
+    public_id = f"profile_{current_user.id}"
     params = {
+        "allowed_formats": "jpg,jpeg,png,webp",
         "folder": "forma/profile_photos",
-        "overwrite": "false",
+        "overwrite": "true",
+        "public_id": public_id,
         "timestamp": timestamp,
-        "unique_filename": "true",
-        "upload_preset": "forma_profile_photos",
+        "unique_filename": "false",
     }
     signature = generate_cloudinary_signature(settings.cloudinary_api_secret, params)
     return {
         "signature": signature,
         "timestamp": timestamp,
         "api_key": settings.cloudinary_api_key,
-        "upload_preset": "forma_profile_photos",
         "folder": "forma/profile_photos",
-        "overwrite": "false",
-        "unique_filename": "true",
+        "overwrite": "true",
+        "unique_filename": "false",
         "cloud_name": settings.cloudinary_cloud_name,
         "resource_type": "image",
+        "public_id": public_id,
+        "allowed_formats": "jpg,jpeg,png,webp",
     }

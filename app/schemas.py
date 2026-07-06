@@ -119,12 +119,14 @@ class UploadSignatureOut(BaseModel):
     signature: str
     timestamp: int
     api_key: str
-    upload_preset: str
     folder: str
     overwrite: str
     unique_filename: str
     cloud_name: str
+    upload_preset: str | None = None
     resource_type: str | None = None
+    public_id: str | None = None
+    allowed_formats: str | None = None
 
 
 # Drops Schemas
