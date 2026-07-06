@@ -197,10 +197,22 @@ def test_upload_signature_excludes_api_secret():
     data = response.json()
     assert "signature" in data
     assert "timestamp" in data
+    assert data["resource_type"] == "video"
     # API Secret should not be anywhere in the payload keys or values
     assert "api_secret" not in data
     # Default secret in test environment is change-me-in-production
     assert "change-me-in-production" not in data.values()
+
+
+def test_profile_photo_upload_signature_route_is_registered_once():
+    matching_routes = [
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/uploads/profile-photo/signature"
+        and "POST" in getattr(route, "methods", set())
+    ]
+
+    assert len(matching_routes) == 1
 
 
 def test_profile_photo_upload_signature_requires_auth():
@@ -217,6 +229,7 @@ def test_profile_photo_upload_signature_excludes_api_secret():
     data = response.json()
     assert data["folder"] == "forma/profile_photos"
     assert data["upload_preset"] == "forma_profile_photos"
+    assert data["resource_type"] == "image"
     assert "signature" in data
     assert "timestamp" in data
     assert "api_secret" not in data

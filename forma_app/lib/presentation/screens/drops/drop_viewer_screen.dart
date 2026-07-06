@@ -11,6 +11,7 @@ import '../../cubits/auth_cubit.dart';
 import '../../cubits/public_profile_cubit.dart';
 import '../../cubits/scout_shortlist_cubit.dart';
 import '../../theme.dart';
+import '../../widgets/avatar_image.dart';
 import '../profile/public_profile_screen.dart';
 import 'comments_sheet.dart';
 
@@ -651,6 +652,9 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
     final isScout =
         authState is AuthAuthenticated && authState.user.role == 'scout';
     final controller = widget.controller;
+    final authorProfilePhoto = avatarImageProvider(
+      widget.drop.user?.profilePhotoUrl,
+    );
 
     return GestureDetector(
       onTap: _togglePlayPause,
@@ -758,11 +762,8 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
                     children: [
                       CircleAvatar(
                         radius: 18,
-                        backgroundImage:
-                            widget.drop.user?.profilePhotoUrl != null
-                            ? NetworkImage(widget.drop.user!.profilePhotoUrl!)
-                            : null,
-                        child: widget.drop.user?.profilePhotoUrl == null
+                        backgroundImage: authorProfilePhoto,
+                        child: authorProfilePhoto == null
                             ? const Icon(Icons.person, size: 18)
                             : null,
                       ),

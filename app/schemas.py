@@ -124,6 +124,7 @@ class UploadSignatureOut(BaseModel):
     overwrite: str
     unique_filename: str
     cloud_name: str
+    resource_type: str | None = None
 
 
 # Drops Schemas

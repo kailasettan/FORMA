@@ -92,7 +92,12 @@ class Drop extends Equatable {
     category,
   ];
 
-  Drop copyWith({int? propsCount, int? commentsCount, bool? hasPropped}) {
+  Drop copyWith({
+    int? propsCount,
+    int? commentsCount,
+    bool? hasPropped,
+    User? user,
+  }) {
     return Drop(
       id: id,
       userId: userId,
@@ -117,7 +122,7 @@ class Drop extends Equatable {
       propsCount: propsCount ?? this.propsCount,
       commentsCount: commentsCount ?? this.commentsCount,
       hasPropped: hasPropped ?? this.hasPropped,
-      user: user,
+      user: user ?? this.user,
       sport: sport,
       category: category,
     );

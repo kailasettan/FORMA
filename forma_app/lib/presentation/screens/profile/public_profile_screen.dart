@@ -4,6 +4,7 @@ import '../../cubits/auth_cubit.dart';
 import '../../cubits/public_profile_cubit.dart';
 import '../../cubits/scout_shortlist_cubit.dart';
 import '../../theme.dart';
+import '../../widgets/avatar_image.dart';
 import '../drops/drop_viewer_screen.dart';
 
 class PublicProfileScreen extends StatefulWidget {
@@ -134,6 +135,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
             final profile = state.profile;
             final user = profile.user;
             final hasDrops = profile.drops.isNotEmpty;
+            final profilePhoto = avatarImageProvider(user.profilePhotoUrl);
 
             return RefreshIndicator(
               onRefresh: () async {
@@ -159,11 +161,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                 children: [
                                   CircleAvatar(
                                     radius: 36,
-                                    backgroundImage:
-                                        user.profilePhotoUrl != null
-                                        ? NetworkImage(user.profilePhotoUrl!)
-                                        : null,
-                                    child: user.profilePhotoUrl == null
+                                    backgroundImage: profilePhoto,
+                                    child: profilePhoto == null
                                         ? Text(
                                             user.fullName.isNotEmpty
                                                 ? user.fullName

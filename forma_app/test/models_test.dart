@@ -49,6 +49,43 @@ void main() {
       expect(user.profilePhotoUrl, isNull);
     });
 
+    test('UserModel should parse supported profile photo field variants', () {
+      final baseJson = {
+        'id': 'b102b54c-53e7-4008-8e68-3e40632b6941',
+        'username': 'johndoe',
+        'email': 'john@example.com',
+        'full_name': 'John Doe',
+        'created_at': '2026-07-02T12:00:00Z',
+      };
+
+      for (final entry in {
+        'profile_photo_url': 'https://example.com/profile-photo.jpg',
+        'profilePhotoUrl': 'https://example.com/profile-photo-camel.jpg',
+        'avatar_url': 'https://example.com/avatar.jpg',
+        'avatarUrl': 'https://example.com/avatar-camel.jpg',
+      }.entries) {
+        final user = UserModel.fromJson({...baseJson, entry.key: entry.value});
+
+        expect(user.profilePhotoUrl, entry.value);
+      }
+    });
+
+    test('UserModel should normalize missing or blank profile photo URL', () {
+      final json = {
+        'id': 'b102b54c-53e7-4008-8e68-3e40632b6941',
+        'username': 'johndoe',
+        'email': 'john@example.com',
+        'fullName': 'John Doe',
+        'avatarUrl': '   ',
+        'created_at': '2026-07-02T12:00:00Z',
+      };
+
+      final user = UserModel.fromJson(json);
+
+      expect(user.fullName, 'John Doe');
+      expect(user.profilePhotoUrl, isNull);
+    });
+
     test('AuthResponse should parse access_token and user info', () {
       final json = {
         'access_token': 'secret_jwt_token',
@@ -179,6 +216,37 @@ void main() {
       expect(drop.commentsCount, 0);
       expect(drop.hasPropped, isFalse);
       expect(drop.user?.email, '');
+    });
+
+    test('DropModel parses nested author avatar field variants', () {
+      final json = {
+        'id': 'drop_1',
+        'user_id': 'user_1',
+        'sport_id': 'sport_1',
+        'provider': 'cloudinary',
+        'provider_asset_id': 'asset_1',
+        'public_id': 'forma/skill_clips/drop_1',
+        'playback_url': 'https://res.cloudinary.com/demo/video/upload/drop.mp4',
+        'duration_seconds': 12.4,
+        'format': 'mp4',
+        'bytes': 1024,
+        'moderation_status': 'approved',
+        'visibility': 'public',
+        'created_at': '2026-07-03T12:00:00Z',
+        'author': {
+          'id': 'user_1',
+          'username': 'athlete',
+          'email': 'athlete@example.com',
+          'fullName': 'Athlete One',
+          'avatarUrl': 'https://example.com/avatar.jpg',
+          'created_at': '2026-07-02T12:00:00Z',
+        },
+      };
+
+      final drop = DropModel.fromJson(json);
+
+      expect(drop.user?.fullName, 'Athlete One');
+      expect(drop.user?.profilePhotoUrl, 'https://example.com/avatar.jpg');
     });
   });
 }

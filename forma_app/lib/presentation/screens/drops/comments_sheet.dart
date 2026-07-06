@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubits/auth_cubit.dart';
 import '../../cubits/comments_cubit.dart';
 import '../../theme.dart';
+import '../../widgets/avatar_image.dart';
 
 class CommentsSheet extends StatefulWidget {
   final String dropId;
@@ -122,6 +123,9 @@ class _CommentsSheetState extends State<CommentsSheet> {
                     itemBuilder: (context, index) {
                       final comment = comments[index];
                       final isAuthor = loggedInUserId == comment.userId;
+                      final profilePhoto = avatarImageProvider(
+                        comment.user?.profilePhotoUrl,
+                      );
 
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -130,11 +134,8 @@ class _CommentsSheetState extends State<CommentsSheet> {
                           children: [
                             CircleAvatar(
                               radius: 16,
-                              backgroundImage:
-                                  comment.user?.profilePhotoUrl != null
-                                  ? NetworkImage(comment.user!.profilePhotoUrl!)
-                                  : null,
-                              child: comment.user?.profilePhotoUrl == null
+                              backgroundImage: profilePhoto,
+                              child: profilePhoto == null
                                   ? const Icon(Icons.person, size: 16)
                                   : null,
                             ),

@@ -39,4 +39,5 @@ def get_profile_photo_upload_signature(
         "overwrite": "false",
         "unique_filename": "true",
         "cloud_name": settings.cloudinary_cloud_name,
+        "resource_type": "image",
     }

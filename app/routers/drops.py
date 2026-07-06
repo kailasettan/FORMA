@@ -176,6 +176,7 @@ def get_upload_signature(current_user: User = Depends(get_current_user)) -> dict
         "overwrite": "false",
         "unique_filename": "true",
         "cloud_name": settings.cloudinary_cloud_name,
+        "resource_type": "video",
     }
 
 

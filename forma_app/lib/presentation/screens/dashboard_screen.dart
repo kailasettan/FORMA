@@ -43,9 +43,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final dropCubit = context.read<DropCubit>();
     final profileCubit = context.read<ProfileCubit>();
     final dropFeedCubit = context.read<DropFeedCubit>();
+    final visibleDrop = createdDrop.copyWith(user: createdDrop.user ?? user);
     _debugUploadResult('created drop returned: id=${createdDrop.id}');
     try {
-      dropCubit.insertDrop(createdDrop);
+      dropCubit.insertDrop(visibleDrop);
       _debugUploadResult('profile insertion success: id=${createdDrop.id}');
     } catch (error) {
       _debugUploadResult(
@@ -54,7 +55,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     try {
-      dropFeedCubit.insertNewlyCreatedDrop(createdDrop);
+      dropFeedCubit.insertNewlyCreatedDrop(visibleDrop);
       _debugUploadResult('feed insertion success: id=${createdDrop.id}');
     } catch (error) {
       _debugUploadResult('feed insertion failed: ${error.runtimeType}: $error');

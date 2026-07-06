@@ -24,10 +24,15 @@ class UserModel extends User {
       id: _requiredString(json, 'id'),
       username: _requiredString(json, 'username'),
       email: json['email'] as String? ?? '',
-      fullName: _requiredString(json, 'full_name'),
+      fullName: _requiredStringFromAny(json, const ['full_name', 'fullName']),
       age: (json['age'] as num?)?.toInt(),
       city: json['city'] as String?,
-      profilePhotoUrl: json['profile_photo_url'] as String?,
+      profilePhotoUrl: _optionalStringFromAny(json, const [
+        'profile_photo_url',
+        'profilePhotoUrl',
+        'avatar_url',
+        'avatarUrl',
+      ]),
       createdAt: _dateTimeOrNow(json['created_at']),
       headline: json['headline'] as String?,
       bio: json['bio'] as String?,
@@ -66,6 +71,30 @@ String _requiredString(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is String && value.isNotEmpty) return value;
   throw FormatException('User response missing required field: $key');
+}
+
+String _requiredStringFromAny(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = _optionalString(json[key]);
+    if (value != null) return value;
+  }
+  throw FormatException('User response missing required field: ${keys.first}');
+}
+
+String? _optionalStringFromAny(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = _optionalString(json[key]);
+    if (value != null) return value;
+  }
+  return null;
+}
+
+String? _optionalString(Object? value) {
+  if (value is String) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+  return null;
 }
 
 DateTime _dateTimeOrNow(Object? value) {

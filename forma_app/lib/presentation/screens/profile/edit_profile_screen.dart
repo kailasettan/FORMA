@@ -9,6 +9,7 @@ import '../../../domain/repositories/profile_repository.dart';
 import '../../cubits/auth_cubit.dart';
 import '../../cubits/catalog_cubit.dart';
 import '../../theme.dart';
+import '../../widgets/avatar_image.dart';
 import 'profile_dropdown_safety.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -108,12 +109,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final selectedFile = _selectedProfilePhotoFile;
     if (selectedFile != null) return FileImage(selectedFile);
 
-    final currentUrl = widget.user.profilePhotoUrl;
-    if (currentUrl != null && currentUrl.isNotEmpty) {
-      return NetworkImage(currentUrl);
-    }
-
-    return null;
+    return avatarImageProvider(widget.user.profilePhotoUrl);
   }
 
   bool _isAllowedProfileImage(String path) {
@@ -260,6 +256,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           GestureDetector(
                             onTap: _isSaving ? null : _pickProfilePhoto,
                             child: CircleAvatar(
+                              key: ValueKey(
+                                _selectedProfilePhotoFile?.path ??
+                                    validAvatarUrl(widget.user.profilePhotoUrl),
+                              ),
                               radius: 48,
                               backgroundColor: AppTheme.primary.withValues(
                                 alpha: 0.12,

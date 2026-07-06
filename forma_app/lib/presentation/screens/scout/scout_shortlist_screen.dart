@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubits/scout_shortlist_cubit.dart';
 import '../../theme.dart';
+import '../../widgets/avatar_image.dart';
 import '../profile/public_profile_screen.dart';
 
 class ScoutShortlistScreen extends StatefulWidget {
@@ -107,6 +108,9 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                   final athlete = item.athlete;
 
                   if (athlete == null) return const SizedBox.shrink();
+                  final profilePhoto = avatarImageProvider(
+                    athlete.profilePhotoUrl,
+                  );
 
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 6.0),
@@ -120,10 +124,8 @@ class _ScoutShortlistScreenState extends State<ScoutShortlistScreen> {
                           ),
                           leading: CircleAvatar(
                             radius: 24,
-                            backgroundImage: athlete.profilePhotoUrl != null
-                                ? NetworkImage(athlete.profilePhotoUrl!)
-                                : null,
-                            child: athlete.profilePhotoUrl == null
+                            backgroundImage: profilePhoto,
+                            child: profilePhoto == null
                                 ? const Icon(Icons.person_rounded)
                                 : null,
                           ),

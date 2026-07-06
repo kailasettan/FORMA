@@ -55,8 +55,11 @@ class DropModel extends Drop {
       }
 
       currentField = 'user';
-      _debugDropField(json, 'user', (json['user'] ?? json['athlete']) == null);
-      final userMap = _mapOrNull(json['user'] ?? json['athlete']);
+      // Drops feed/detail responses should include one nested author object with
+      // profile_photo_url/profilePhotoUrl/avatar_url/avatarUrl for avatar UI.
+      final rawUser = json['user'] ?? json['author'] ?? json['athlete'];
+      _debugDropField(json, 'user', rawUser == null);
+      final userMap = _mapOrNull(rawUser);
       final sportMap = parseField('sport', _mapOrNull);
       final catMap = parseField('category', _mapOrNull);
 

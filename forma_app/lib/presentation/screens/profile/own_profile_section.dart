@@ -10,6 +10,7 @@ import '../../cubits/drop_cubit.dart';
 import '../../cubits/drop_feed_cubit.dart';
 import '../../router.dart';
 import '../../theme.dart';
+import '../../widgets/avatar_image.dart';
 import '../drops/drop_viewer_screen.dart';
 import '../drops/drop_upload_screen.dart';
 import 'edit_profile_screen.dart';
@@ -25,6 +26,7 @@ class OwnProfileSection extends StatefulWidget {
 
 class _OwnProfileSectionState extends State<OwnProfileSection> {
   String? _lastProfilePhotoUrl;
+  int _profilePhotoCacheBust = 0;
 
   @override
   void initState() {
@@ -47,14 +49,14 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
   }
 
   void _evictProfilePhoto(String? url) {
-    if (url == null || url.isEmpty) return;
-    NetworkImage(url).evict();
+    final validUrl = validAvatarUrl(url);
+    if (validUrl == null) return;
+    NetworkImage(validUrl).evict();
   }
 
   int _calculateCompletion(List<PlayerProfile> profiles, List<Drop> drops) {
     int score = 0;
-    if (widget.user.profilePhotoUrl != null &&
-        widget.user.profilePhotoUrl!.isNotEmpty) {
+    if (validAvatarUrl(widget.user.profilePhotoUrl) != null) {
       score += 15;
     }
     if (widget.user.headline != null && widget.user.headline!.isNotEmpty) {
@@ -151,6 +153,12 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                 ? dropState.drops
                 : [];
             final completion = _calculateCompletion(profiles, drops);
+            final profilePhoto = avatarImageProvider(
+              widget.user.profilePhotoUrl,
+              cacheBust: _profilePhotoCacheBust == 0
+                  ? null
+                  : _profilePhotoCacheBust,
+            );
 
             return RefreshIndicator(
               onRefresh: () async {
@@ -174,14 +182,12 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                               Row(
                                 children: [
                                   CircleAvatar(
+                                    key: ValueKey(
+                                      '${validAvatarUrl(widget.user.profilePhotoUrl)}-$_profilePhotoCacheBust',
+                                    ),
                                     radius: 32,
-                                    backgroundImage:
-                                        widget.user.profilePhotoUrl != null
-                                        ? NetworkImage(
-                                            widget.user.profilePhotoUrl!,
-                                          )
-                                        : null,
-                                    child: widget.user.profilePhotoUrl == null
+                                    backgroundImage: profilePhoto,
+                                    child: profilePhoto == null
                                         ? Text(
                                             widget.user.fullName.isNotEmpty
                                                 ? widget.user.fullName
@@ -324,6 +330,14 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                         );
                                         _lastProfilePhotoUrl =
                                             updatedUser.profilePhotoUrl;
+                                        if (validAvatarUrl(
+                                              updatedUser.profilePhotoUrl,
+                                            ) !=
+                                            null) {
+                                          setState(() {
+                                            _profilePhotoCacheBust++;
+                                          });
+                                        }
                                         authCubit.updateCurrentUser(
                                           updatedUser,
                                         );
@@ -359,7 +373,13 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                             'created drop returned: id=${createdDrop.id}',
                                           );
                                           try {
-                                            dropCubit.insertDrop(createdDrop);
+                                            final visibleDrop = createdDrop
+                                                .copyWith(
+                                                  user:
+                                                      createdDrop.user ??
+                                                      widget.user,
+                                                );
+                                            dropCubit.insertDrop(visibleDrop);
                                             _debugUploadResult(
                                               'profile insertion success: id=${createdDrop.id}',
                                             );
@@ -372,7 +392,11 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                           try {
                                             dropFeedCubit
                                                 .insertNewlyCreatedDrop(
-                                                  createdDrop,
+                                                  createdDrop.copyWith(
+                                                    user:
+                                                        createdDrop.user ??
+                                                        widget.user,
+                                                  ),
                                                 );
                                             _debugUploadResult(
                                               'feed insertion success: id=${createdDrop.id}',
@@ -459,8 +483,8 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                 const SizedBox(height: 8),
                                 _buildCompletionCheckItem(
                                   'Add a profile photo',
-                                  widget.user.profilePhotoUrl != null &&
-                                      widget.user.profilePhotoUrl!.isNotEmpty,
+                                  validAvatarUrl(widget.user.profilePhotoUrl) !=
+                                      null,
                                 ),
                                 _buildCompletionCheckItem(
                                   'Add a sports headline',

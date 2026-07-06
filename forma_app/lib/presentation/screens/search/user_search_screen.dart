@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubits/user_search_cubit.dart';
 import '../../theme.dart';
+import '../../widgets/avatar_image.dart';
 import '../profile/public_profile_screen.dart';
 
 class UserSearchScreen extends StatefulWidget {
@@ -136,6 +137,9 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     itemBuilder: (context, index) {
                       final user = users[index];
+                      final profilePhoto = avatarImageProvider(
+                        user.profilePhotoUrl,
+                      );
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 6.0),
                         child: ListTile(
@@ -145,10 +149,8 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                           ),
                           leading: CircleAvatar(
                             radius: 24,
-                            backgroundImage: user.profilePhotoUrl != null
-                                ? NetworkImage(user.profilePhotoUrl!)
-                                : null,
-                            child: user.profilePhotoUrl == null
+                            backgroundImage: profilePhoto,
+                            child: profilePhoto == null
                                 ? const Icon(Icons.person_rounded)
                                 : null,
                           ),
