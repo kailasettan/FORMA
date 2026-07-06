@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.routers import auth, profiles, stats, users, catalog, drops, scout
+from app.routers import auth, profiles, stats, users, catalog, drops, scout, uploads
 
 app = FastAPI(title="Forma API")
 
@@ -30,6 +30,7 @@ app.include_router(stats.router)
 app.include_router(catalog.router)
 app.include_router(drops.router)
 app.include_router(scout.router)
+app.include_router(uploads.router)
 
 
 @app.get("/health")

@@ -18,8 +18,6 @@ class _SignupScreenState extends State<SignupScreen> {
   final _passwordController = TextEditingController();
   final _fullNameController = TextEditingController();
 
-  String _selectedRole = 'athlete';
-
   @override
   void dispose() {
     _usernameController.dispose();
@@ -36,7 +34,7 @@ class _SignupScreenState extends State<SignupScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
         fullName: _fullNameController.text.trim(),
-        role: _selectedRole,
+        role: 'athlete',
       );
     }
   }
@@ -146,28 +144,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         return null;
                       },
                     ),
-                    DropdownButtonFormField<String>(
-                      initialValue: _selectedRole,
-                      decoration: const InputDecoration(
-                        labelText: 'I want to join as',
-                        prefixIcon: Icon(Icons.people_outline),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'athlete',
-                          child: Text('ATHLETE'),
-                        ),
-                        DropdownMenuItem(value: 'scout', child: Text('SCOUT')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() {
-                            _selectedRole = val;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 18),
                     TextFormField(
                       controller: _passwordController,
                       obscureText: true,

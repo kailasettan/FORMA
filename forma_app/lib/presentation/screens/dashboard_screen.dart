@@ -39,41 +39,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _openUpload(User user) async {
+  void _handleUploadedDrop(User user, Drop createdDrop) {
     final dropCubit = context.read<DropCubit>();
     final profileCubit = context.read<ProfileCubit>();
     final dropFeedCubit = context.read<DropFeedCubit>();
-    final createdDrop = await Navigator.push<Drop>(
-      context,
-      MaterialPageRoute(builder: (_) => const DropUploadScreen()),
-    );
-    if (createdDrop != null && mounted) {
-      _debugUploadResult('created drop returned: id=${createdDrop.id}');
-      try {
-        dropCubit.insertDrop(createdDrop);
-        _debugUploadResult('profile insertion success: id=${createdDrop.id}');
-      } catch (error) {
-        _debugUploadResult(
-          'profile insertion failed: ${error.runtimeType}: $error',
-        );
-      }
-
-      try {
-        dropFeedCubit.insertNewlyCreatedDrop(createdDrop);
-        _debugUploadResult('feed insertion success: id=${createdDrop.id}');
-      } catch (error) {
-        _debugUploadResult(
-          'feed insertion failed: ${error.runtimeType}: $error',
-        );
-      }
-
-      _refreshAfterUpload(
-        user: user,
-        dropCubit: dropCubit,
-        profileCubit: profileCubit,
-        dropFeedCubit: dropFeedCubit,
+    _debugUploadResult('created drop returned: id=${createdDrop.id}');
+    try {
+      dropCubit.insertDrop(createdDrop);
+      _debugUploadResult('profile insertion success: id=${createdDrop.id}');
+    } catch (error) {
+      _debugUploadResult(
+        'profile insertion failed: ${error.runtimeType}: $error',
       );
     }
+
+    try {
+      dropFeedCubit.insertNewlyCreatedDrop(createdDrop);
+      _debugUploadResult('feed insertion success: id=${createdDrop.id}');
+    } catch (error) {
+      _debugUploadResult('feed insertion failed: ${error.runtimeType}: $error');
+    }
+
+    _refreshAfterUpload(
+      user: user,
+      dropCubit: dropCubit,
+      profileCubit: profileCubit,
+      dropFeedCubit: dropFeedCubit,
+    );
   }
 
   Future<void> _refreshAfterUpload({
@@ -144,6 +136,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         : [
             DropsFeedScreen(isActive: _currentIndex == 0),
             const UserSearchScreen(),
+            DropUploadScreen(
+              showAppBar: false,
+              popOnSuccess: false,
+              onDropPosted: (drop) => _handleUploadedDrop(user, drop),
+            ),
             OwnProfileSection(user: user),
           ];
 
@@ -188,23 +185,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ];
 
-    final bodyIndex = isScout
-        ? _currentIndex
-        : (_currentIndex == 3 ? 2 : _currentIndex);
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('FORMA'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Log Out',
-            onPressed: () {
-              _showLogoutDialog(context);
-            },
-          ),
-        ],
-      ),
+      appBar: _currentIndex == 0 ? null : AppBar(title: const Text('FORMA')),
       body: BlocListener<AuthCubit, AuthState>(
         listener: (context, state) {
           if (state is AuthUnauthenticated) {
@@ -215,15 +197,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             );
           }
         },
-        child: IndexedStack(index: bodyIndex, children: tabs),
+        child: IndexedStack(index: _currentIndex, children: tabs),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
-          if (!isScout && index == 2) {
-            _openUpload(user);
-            return;
-          }
           setState(() {
             _currentIndex = index;
           });
@@ -232,32 +210,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         selectedItemColor: AppTheme.primary,
         unselectedItemColor: AppTheme.textSecondary,
         items: navItems,
-      ),
-    );
-  }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Log Out'),
-        content: const Text('Are you sure you want to end your session?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL', style: TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.read<AuthCubit>().logout();
-            },
-            child: const Text(
-              'LOG OUT',
-              style: TextStyle(color: AppTheme.error),
-            ),
-          ),
-        ],
       ),
     );
   }

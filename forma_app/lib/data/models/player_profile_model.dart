@@ -14,7 +14,12 @@ class PlayerProfileModel extends PlayerProfile {
   });
 
   factory PlayerProfileModel.fromJson(Map<String, dynamic> json) {
-    final sportMap = json['sport'] as Map<String, dynamic>?;
+    final sportValue = json['sport'];
+    final sportMap = sportValue is Map<String, dynamic>
+        ? sportValue
+        : sportValue is Map
+        ? Map<String, dynamic>.from(sportValue)
+        : null;
     final sportDetails = sportMap != null
         ? SportModel.fromJson(sportMap)
         : null;
@@ -23,13 +28,13 @@ class PlayerProfileModel extends PlayerProfile {
     final sportSlug = sportDetails?.slug ?? (json['sport_id'] as String? ?? '');
 
     return PlayerProfileModel(
-      id: json['id'] as String,
-      userId: json['user_id'] as String,
+      id: _requiredString(json, 'id'),
+      userId: _requiredString(json, 'user_id'),
       sport: sportSlug,
       position:
           json['position'] as String? ?? json['role_or_discipline'] as String?,
-      skillLevel: json['skill_level'] as String,
-      sportId: json['sport_id'] as String,
+      skillLevel: _requiredString(json, 'skill_level'),
+      sportId: _requiredString(json, 'sport_id'),
       roleOrDiscipline:
           json['role_or_discipline'] as String? ?? json['position'] as String?,
       sportDetails: sportDetails,
@@ -47,4 +52,10 @@ class PlayerProfileModel extends PlayerProfile {
       'role_or_discipline': roleOrDiscipline,
     };
   }
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is String && value.isNotEmpty) return value;
+  throw FormatException('Player profile response missing required field: $key');
 }

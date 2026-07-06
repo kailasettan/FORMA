@@ -1,7 +1,7 @@
 import uuid
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 
 from app.database import get_db
@@ -135,6 +135,53 @@ def create_test_user(username: str, role: str = "athlete") -> tuple[User, str]:
     return user, token
 
 
+def test_signup_missing_role_creates_athlete_user():
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": "beta_athlete",
+            "email": "beta_athlete@example.com",
+            "password": "password123",
+            "full_name": "Beta Athlete",
+        },
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["user"]["role"] == "athlete"
+
+    db = TestingSessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.username == "beta_athlete"))
+        assert user is not None
+        assert user.role == "athlete"
+    finally:
+        db.close()
+
+
+def test_signup_rejects_public_scout_role():
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": "public_scout",
+            "email": "public_scout@example.com",
+            "password": "password123",
+            "full_name": "Public Scout",
+            "role": "scout",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Scout accounts cannot be created from public signup."
+
+    db = TestingSessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.username == "public_scout"))
+        assert user is None
+    finally:
+        db.close()
+
+
 def test_signed_upload_signature_requires_auth():
     # Unauthenticated should receive 401
     response = client.post("/drops/upload-signature")
@@ -153,6 +200,26 @@ def test_upload_signature_excludes_api_secret():
     # API Secret should not be anywhere in the payload keys or values
     assert "api_secret" not in data
     # Default secret in test environment is change-me-in-production
+    assert "change-me-in-production" not in data.values()
+
+
+def test_profile_photo_upload_signature_requires_auth():
+    response = client.post("/uploads/profile-photo/signature")
+    assert response.status_code == 401
+
+
+def test_profile_photo_upload_signature_excludes_api_secret():
+    _, token = create_test_user("athlete_a")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.post("/uploads/profile-photo/signature", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["folder"] == "forma/profile_photos"
+    assert data["upload_preset"] == "forma_profile_photos"
+    assert "signature" in data
+    assert "timestamp" in data
+    assert "api_secret" not in data
     assert "change-me-in-production" not in data.values()
 
 
@@ -330,6 +397,82 @@ def test_only_owner_can_delete_drop():
     headers_a = {"Authorization": f"Bearer {token_a}"}
     response = client.delete(f"/drops/{drop_id}", headers=headers_a)
     assert response.status_code == 204
+
+
+def test_owner_can_delete_player_profile_without_deleting_user_or_drops():
+    athlete_a, token_a = create_test_user("athlete_a")
+
+    db = TestingSessionLocal()
+    sport = db.query(SportCatalog).filter_by(slug="football").first()
+    profile = PlayerProfile(
+        user_id=athlete_a.id,
+        sport_id=sport.id,
+        role_or_discipline="Striker",
+        skill_level="advanced",
+    )
+    db.add(profile)
+    db.flush()
+    drop = Drop(
+        user_id=athlete_a.id,
+        player_profile_id=profile.id,
+        sport_id=sport.id,
+        provider_asset_id="asset_a",
+        public_id="drop_a",
+        playback_url="url",
+        duration_seconds=10,
+        format="mp4",
+        bytes=1000,
+        visibility="public",
+    )
+    db.add(drop)
+    db.commit()
+    profile_id = profile.id
+    drop_id = drop.id
+    user_id = athlete_a.id
+    db.close()
+
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+    response = client.delete(f"/player-profiles/{profile_id}", headers=headers_a)
+    assert response.status_code == 204
+
+    db = TestingSessionLocal()
+    try:
+        assert db.get(PlayerProfile, profile_id) is None
+        assert db.get(User, user_id) is not None
+        saved_drop = db.get(Drop, drop_id)
+        assert saved_drop is not None
+        assert saved_drop.user_id == user_id
+        assert saved_drop.player_profile_id is None
+    finally:
+        db.close()
+
+
+def test_another_user_cannot_delete_player_profile():
+    athlete_a, _ = create_test_user("athlete_a")
+    _, token_b = create_test_user("athlete_b")
+
+    db = TestingSessionLocal()
+    sport = db.query(SportCatalog).filter_by(slug="football").first()
+    profile = PlayerProfile(
+        user_id=athlete_a.id,
+        sport_id=sport.id,
+        role_or_discipline="Striker",
+        skill_level="advanced",
+    )
+    db.add(profile)
+    db.commit()
+    profile_id = profile.id
+    db.close()
+
+    headers_b = {"Authorization": f"Bearer {token_b}"}
+    response = client.delete(f"/player-profiles/{profile_id}", headers=headers_b)
+    assert response.status_code == 403
+
+    db = TestingSessionLocal()
+    try:
+        assert db.get(PlayerProfile, profile_id) is not None
+    finally:
+        db.close()
 
 
 def test_private_drop_not_visible_publicly():

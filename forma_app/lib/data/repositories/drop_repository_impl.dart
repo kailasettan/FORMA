@@ -361,21 +361,18 @@ class DropRepositoryImpl implements DropRepository {
   void _debugCloudinaryResponse(Map<String, dynamic> json) {
     if (!kDebugMode) return;
     debugPrint(
-      '[DropUploadRepository] cloudinary accepted: '
-      'asset_id=${json['asset_id']} '
-      'public_id=${json['public_id']} '
-      'resource_type=${json['resource_type']} '
-      'secure_url=${json['secure_url']} '
-      'duration=${json['duration']} '
-      'bytes=${json['bytes']} '
-      'format=${json['format']}',
+      '[DropUploadRepository] cloudinary accepted keys=${json.keys.toList()} '
+      'resource_type=${json['resource_type'] == null ? 'null' : 'present'} '
+      'duration=${json['duration'] == null ? 'null' : 'present'} '
+      'bytes=${json['bytes'] == null ? 'null' : 'present'} '
+      'format=${json['format'] == null ? 'null' : 'present'}',
     );
   }
 
   void _debugPostDropsPayload(Map<String, dynamic> payload) {
     if (!kDebugMode) return;
     debugPrint(
-      '[DropUploadRepository] POST /drops json: ${jsonEncode(payload)}',
+      '[DropUploadRepository] POST /drops payload keys: ${payload.keys.toList()}',
     );
   }
 
@@ -383,10 +380,8 @@ class DropRepositoryImpl implements DropRepository {
     if (!kDebugMode) return;
     debugPrint(
       '[DropUploadRepository] POST /drops created: '
-      'id=${drop.id} '
       'moderation_status=${drop.moderationStatus} '
-      'visibility=${drop.visibility} '
-      'user_id=${drop.userId}',
+      'visibility=${drop.visibility}',
     );
   }
 

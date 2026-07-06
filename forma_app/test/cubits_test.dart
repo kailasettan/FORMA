@@ -6,11 +6,15 @@ import 'package:forma/data/api_client.dart';
 import 'package:forma/presentation/cubits/drop_feed_cubit.dart';
 import 'package:forma/presentation/cubits/auth_cubit.dart';
 import 'package:forma/presentation/cubits/drop_upload_cubit.dart';
+import 'package:forma/presentation/cubits/profile_cubit.dart';
 import 'package:forma/domain/entities/drop.dart';
 import 'package:forma/domain/entities/drop_comment.dart';
+import 'package:forma/domain/entities/player_profile.dart';
+import 'package:forma/domain/entities/public_athlete_profile.dart';
 import 'package:forma/domain/entities/user.dart';
 import 'package:forma/domain/repositories/auth_repository.dart';
 import 'package:forma/domain/repositories/drop_repository.dart';
+import 'package:forma/domain/repositories/profile_repository.dart';
 
 class FakeAuthRepository implements AuthRepository {
   User? mockUser;
@@ -143,6 +147,85 @@ class FakeDropRepository implements DropRepository {
 
   @override
   Future<void> removeProps(String dropId) async {}
+}
+
+class FakeProfileRepository implements ProfileRepository {
+  List<PlayerProfile> profiles = [];
+  bool shouldThrowOnDelete = false;
+  String? deletedProfileId;
+
+  @override
+  Future<List<PlayerProfile>> fetchPlayerProfiles(String userId) async {
+    return profiles;
+  }
+
+  @override
+  Future<PlayerProfile> createPlayerProfile({
+    required String sportId,
+    String? roleOrDiscipline,
+    required String skillLevel,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<PlayerProfile> updatePlayerProfile(
+    String profileId, {
+    String? roleOrDiscipline,
+    String? skillLevel,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> deletePlayerProfile(String profileId) async {
+    if (shouldThrowOnDelete) throw Exception('delete failed');
+    deletedProfileId = profileId;
+    profiles = profiles.where((profile) => profile.id != profileId).toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>> getProfilePhotoUploadSignature() async => {};
+
+  @override
+  Future<Map<String, dynamic>> uploadProfilePhotoToCloudinary({
+    required File file,
+    required Map<String, dynamic> signatureData,
+  }) async => {};
+
+  @override
+  Future<User> updateMe({
+    String? username,
+    String? fullName,
+    int? age,
+    String? city,
+    String? profilePhotoUrl,
+    String? headline,
+    String? bio,
+    String? location,
+    String? availability,
+    List<String>? preferredOpportunityTypes,
+    String? focusedSportId,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<PublicAthleteProfile> fetchPublicAthleteProfile(String userId) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<PublicAthleteProfile> fetchPublicAthleteProfileByUsername(
+    String username,
+  ) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<User>> searchAthletes(String query) async {
+    return [];
+  }
 }
 
 Map<String, dynamic> cloudinarySuccess() => {
@@ -296,6 +379,77 @@ void main() {
         await pumpEventQueue();
 
         expect(states, [AuthLoading(), AuthUnauthenticated()]);
+      },
+    );
+  });
+
+  group('ProfileCubit Specialization Removal', () {
+    test(
+      'deleteProfile removes specialization and reloads empty profile list',
+      () async {
+        final repository = FakeProfileRepository()
+          ..profiles = const [
+            PlayerProfile(
+              id: 'profile-1',
+              userId: 'user-1',
+              sport: 'football',
+              skillLevel: 'advanced',
+              sportId: 'sport-1',
+              roleOrDiscipline: 'Striker',
+            ),
+          ];
+        final cubit = ProfileCubit(repository);
+        final List<ProfileState> states = [];
+        cubit.stream.listen(states.add);
+
+        final removed = await cubit.deleteProfile(
+          profileId: 'profile-1',
+          userId: 'user-1',
+        );
+        await pumpEventQueue();
+
+        expect(removed, isTrue);
+        expect(repository.deletedProfileId, 'profile-1');
+        expect(states, [
+          ProfileSubmitting(),
+          ProfileSuccess(),
+          ProfileLoading(),
+          const ProfileLoaded([]),
+        ]);
+      },
+    );
+
+    test(
+      'deleteProfile reports failure and keeps existing profile list',
+      () async {
+        final repository = FakeProfileRepository()
+          ..shouldThrowOnDelete = true
+          ..profiles = const [
+            PlayerProfile(
+              id: 'profile-1',
+              userId: 'user-1',
+              sport: 'football',
+              skillLevel: 'advanced',
+              sportId: 'sport-1',
+              roleOrDiscipline: 'Striker',
+            ),
+          ];
+        final cubit = ProfileCubit(repository);
+        final List<ProfileState> states = [];
+        cubit.stream.listen(states.add);
+
+        final removed = await cubit.deleteProfile(
+          profileId: 'profile-1',
+          userId: 'user-1',
+        );
+        await pumpEventQueue();
+
+        expect(removed, isFalse);
+        expect(repository.profiles, hasLength(1));
+        expect(states, [
+          ProfileSubmitting(),
+          const ProfileError('Exception: delete failed'),
+        ]);
       },
     );
   });

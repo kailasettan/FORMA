@@ -6,6 +6,7 @@ import '../../cubits/auth_cubit.dart';
 import '../../cubits/profile_cubit.dart';
 import '../../cubits/catalog_cubit.dart';
 import '../../theme.dart';
+import 'profile_dropdown_safety.dart';
 
 class ProfileFormScreen extends StatefulWidget {
   final PlayerProfile? profile;
@@ -22,6 +23,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
   String? _selectedSportId;
   late String _selectedSkillLevel;
   final _roleOrDisciplineController = TextEditingController();
+  bool _isRemoving = false;
 
   final List<String> _skillLevels = ['beginner', 'intermediate', 'advanced'];
 
@@ -72,6 +74,51 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     }
   }
 
+  Future<void> _confirmRemoveSpecialization() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Remove this specialization?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text(
+                'Remove',
+                style: TextStyle(color: AppTheme.error),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final authState = context.read<AuthCubit>().state;
+    if (authState is! AuthAuthenticated || widget.profile == null) return;
+
+    setState(() {
+      _isRemoving = true;
+    });
+
+    final removed = await context.read<ProfileCubit>().deleteProfile(
+      profileId: widget.profile!.id,
+      userId: authState.user.id,
+    );
+
+    if (!mounted) return;
+    if (!removed) {
+      setState(() {
+        _isRemoving = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -84,7 +131,9 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  isEditMode
+                  _isRemoving
+                      ? 'Specialization removed'
+                      : isEditMode
                       ? 'Profile updated successfully'
                       : 'Profile created successfully',
                 ),
@@ -93,6 +142,11 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
             );
             Navigator.pop(context);
           } else if (state is ProfileError) {
+            if (_isRemoving) {
+              setState(() {
+                _isRemoving = false;
+              });
+            }
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.message),
@@ -103,6 +157,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
         },
         builder: (context, state) {
           final isSubmitting = state is ProfileSubmitting;
+          final isBusy = isSubmitting || _isRemoving;
 
           return BlocBuilder<CatalogCubit, CatalogState>(
             builder: (context, catalogState) {
@@ -141,13 +196,34 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
 
               List<Sport> sports = [];
               if (catalogState is CatalogLoaded) {
-                sports = catalogState.sports;
+                sports = uniqueByDropdownId(
+                  catalogState.sports,
+                  (sport) => sport.id,
+                  debugLabel: 'ProfileForm.sport',
+                );
                 if (_selectedSportId == null &&
                     sports.isNotEmpty &&
                     !isEditMode) {
                   _selectedSportId = sports.first.id;
                 }
               }
+              final safeSportId = safeDropdownValue(
+                _selectedSportId,
+                sports,
+                (sport) => sport.id,
+                debugLabel: 'ProfileForm.sport',
+              );
+              final uniqueSkillLevels = uniqueByDropdownId(
+                _skillLevels,
+                (level) => level,
+                debugLabel: 'ProfileForm.skillLevel',
+              );
+              final safeSkillLevel = safeDropdownValue(
+                _selectedSkillLevel,
+                uniqueSkillLevels,
+                (level) => level,
+                debugLabel: 'ProfileForm.skillLevel',
+              );
 
               return SafeArea(
                 child: SingleChildScrollView(
@@ -191,7 +267,8 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                           )
                         else
                           DropdownButtonFormField<String>(
-                            initialValue: _selectedSportId,
+                            key: ValueKey('profile-sport-$safeSportId'),
+                            initialValue: safeSportId,
                             decoration: const InputDecoration(
                               labelText: 'Sport',
                               prefixIcon: Icon(Icons.sports_rounded),
@@ -223,7 +300,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                         // Position / Discipline Text Input
                         TextFormField(
                           controller: _roleOrDisciplineController,
-                          enabled: !isSubmitting,
+                          enabled: !isBusy,
                           decoration: const InputDecoration(
                             labelText:
                                 'Role, Position or Discipline (e.g. Striker, Pace Bowler)',
@@ -234,18 +311,19 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
 
                         // Skill Level Dropdown
                         DropdownButtonFormField<String>(
-                          initialValue: _selectedSkillLevel,
+                          key: ValueKey('skill-level-$safeSkillLevel'),
+                          initialValue: safeSkillLevel,
                           decoration: const InputDecoration(
                             labelText: 'Skill Level',
                             prefixIcon: Icon(Icons.star_outline),
                           ),
-                          items: _skillLevels.map((level) {
+                          items: uniqueSkillLevels.map((level) {
                             return DropdownMenuItem<String>(
                               value: level,
                               child: Text(level.toUpperCase()),
                             );
                           }).toList(),
-                          onChanged: isSubmitting
+                          onChanged: isBusy
                               ? null
                               : (val) {
                                   if (val != null) {
@@ -265,8 +343,8 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
 
                         // Submit Button
                         ElevatedButton(
-                          onPressed: isSubmitting ? null : _submit,
-                          child: isSubmitting
+                          onPressed: isBusy ? null : _submit,
+                          child: isBusy
                               ? const SizedBox(
                                   height: 20,
                                   width: 20,
@@ -279,10 +357,23 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                                 )
                               : Text(
                                   isEditMode
-                                      ? 'SAVE CHANGES'
+                                      ? 'Save Changes'
                                       : 'CREATE PROFILE',
                                 ),
                         ),
+                        if (isEditMode) ...[
+                          const SizedBox(height: 12),
+                          OutlinedButton(
+                            onPressed: isBusy
+                                ? null
+                                : _confirmRemoveSpecialization,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.error,
+                              side: const BorderSide(color: AppTheme.error),
+                            ),
+                            child: const Text('Remove Specialization'),
+                          ),
+                        ],
                       ],
                     ),
                   ),

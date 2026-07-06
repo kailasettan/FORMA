@@ -12,7 +12,16 @@ import '../../cubits/drop_upload_cubit.dart';
 import '../../theme.dart';
 
 class DropUploadScreen extends StatefulWidget {
-  const DropUploadScreen({super.key});
+  final bool showAppBar;
+  final bool popOnSuccess;
+  final ValueChanged<Drop>? onDropPosted;
+
+  const DropUploadScreen({
+    super.key,
+    this.showAppBar = true,
+    this.popOnSuccess = true,
+    this.onDropPosted,
+  });
 
   @override
   State<DropUploadScreen> createState() => _DropUploadScreenState();
@@ -137,13 +146,47 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
     }
   }
 
+  Future<void> _resetForm() async {
+    await _videoPlayerController?.dispose();
+    if (!mounted) return;
+    setState(() {
+      _captionController.clear();
+      _videoFile = null;
+      _videoPlayerController = null;
+      _selectedCategoryId = null;
+      _selectedVisibility = 'public';
+      _isValidatingVideo = false;
+      _videoValidationError = null;
+    });
+    context.read<DropUploadCubit>().reset();
+  }
+
+  void _finishUpload(Drop drop) {
+    if (widget.popOnSuccess) {
+      Navigator.pop<Drop>(context, drop);
+    } else {
+      _resetForm();
+    }
+  }
+
+  void _dismissUpload() {
+    if (!widget.popOnSuccess) {
+      _resetForm();
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Upload Drop')),
+      appBar: widget.showAppBar
+          ? AppBar(title: const Text('Upload Drop'))
+          : null,
       body: BlocConsumer<DropUploadCubit, DropUploadState>(
         listener: (context, state) {
           if (state is DropUploadSuccess) {
+            widget.onDropPosted?.call(state.drop);
             _debugUploadScreen(
               'success state: id=${state.drop.id} '
               'secondary=${state.secondaryMessage != null}',
@@ -154,7 +197,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                 backgroundColor: AppTheme.success,
               ),
             );
-            if (state.secondaryMessage == null) {
+            if (widget.popOnSuccess && state.secondaryMessage == null) {
               _debugUploadScreen('popping created drop: id=${state.drop.id}');
               Navigator.pop<Drop>(context, state.drop);
             }
@@ -465,7 +508,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
   Widget _buildActions(DropUploadState state, bool isUploading) {
     if (state is DropUploadSuccess) {
       return ElevatedButton(
-        onPressed: () => Navigator.pop<Drop>(context, state.drop),
+        onPressed: () => _finishUpload(state.drop),
         child: const Text('DONE'),
       );
     }
@@ -481,7 +524,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: _dismissUpload,
               child: const Text('CANCEL'),
             ),
           ),

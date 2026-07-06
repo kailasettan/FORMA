@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
@@ -28,6 +31,7 @@ class DropViewerScreen extends StatefulWidget {
 class _DropViewerScreenState extends State<DropViewerScreen> {
   late PageController _pageController;
   late List<Drop> _currentDrops;
+  late final DropVideoControllerWindow _videoWindow;
   int _focusedIndex = 0;
 
   @override
@@ -36,12 +40,31 @@ class _DropViewerScreenState extends State<DropViewerScreen> {
     _focusedIndex = widget.initialIndex;
     _currentDrops = List.from(widget.drops);
     _pageController = PageController(initialPage: widget.initialIndex);
+    _videoWindow = DropVideoControllerWindow(_refreshVideoState);
+    WidgetsBinding.instance.addObserver(_videoWindow);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncVideoWindow();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(_videoWindow);
+    _videoWindow.disposeAll();
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _refreshVideoState() {
+    if (mounted) setState(() {});
+  }
+
+  void _syncVideoWindow() {
+    _videoWindow.sync(
+      drops: _currentDrops,
+      currentIndex: _focusedIndex,
+      shouldPlayCurrent: true,
+    );
   }
 
   @override
@@ -53,9 +76,11 @@ class _DropViewerScreenState extends State<DropViewerScreen> {
         scrollDirection: Axis.vertical,
         itemCount: _currentDrops.length,
         onPageChanged: (index) {
+          _videoWindow.pauseIndex(_focusedIndex);
           setState(() {
             _focusedIndex = index;
           });
+          _syncVideoWindow();
         },
         itemBuilder: (context, index) {
           final drop = _currentDrops[index];
@@ -64,11 +89,22 @@ class _DropViewerScreenState extends State<DropViewerScreen> {
           return DropVideoPlayerItem(
             drop: drop,
             isFocused: isFocused,
+            controller: _videoWindow.controllerFor(index),
+            isInitializing: _videoWindow.isInitializing(index),
+            videoError: _videoWindow.errorFor(index),
+            onRetryVideo: () => _videoWindow.retry(
+              index: index,
+              drops: _currentDrops,
+              currentIndex: _focusedIndex,
+              shouldPlayCurrent: true,
+            ),
             onDropUpdated: (updatedDrop) {
               setState(() {
                 _currentDrops[index] = updatedDrop;
               });
             },
+            onPauseForOverlay: _videoWindow.suppressPlayback,
+            onResumeAfterOverlay: _videoWindow.resumePlayback,
           );
         },
       ),
@@ -76,140 +112,429 @@ class _DropViewerScreenState extends State<DropViewerScreen> {
   }
 }
 
+class DropVideoControllerWindow with WidgetsBindingObserver {
+  static const int _memoryWindowRadius = 2;
+  static const String _cloudinaryPlaybackTransform = 'q_auto:good';
+
+  final VoidCallback _onChanged;
+  final Map<int, VideoPlayerController> _controllers = {};
+  final Set<int> _initializing = {};
+  final Map<int, Object> _videoErrors = {};
+  final Map<int, int> _generations = {};
+  final Map<int, String> _dropIds = {};
+  final Map<int, Stopwatch> _initializeTimers = {};
+  final Map<int, DateTime> _initializeCompletedAt = {};
+  final Map<int, DateTime> _focusedAt = {};
+  final Map<int, DateTime> _loggedPlayFocusAt = {};
+  int? _currentIndex;
+  bool _shouldPlayCurrent = false;
+  bool _lifecycleAllowsPlayback = true;
+  bool _isPlaybackSuppressed = false;
+  bool _isDisposed = false;
+
+  DropVideoControllerWindow(this._onChanged);
+
+  VideoPlayerController? controllerFor(int index) => _controllers[index];
+
+  bool isInitializing(int index) => _initializing.contains(index);
+
+  Object? errorFor(int index) => _videoErrors[index];
+
+  Future<void> sync({
+    required List<Drop> drops,
+    required int currentIndex,
+    required bool shouldPlayCurrent,
+  }) async {
+    if (_isDisposed) return;
+    final previousIndex = _currentIndex;
+    final previousShouldPlayCurrent = _shouldPlayCurrent;
+    _currentIndex = currentIndex;
+    _shouldPlayCurrent = shouldPlayCurrent;
+
+    final orderedIndexes = <int>[
+      currentIndex,
+      for (var offset = 1; offset <= _memoryWindowRadius; offset++) ...[
+        currentIndex - offset,
+        currentIndex + offset,
+      ],
+    ].where((index) => index >= 0 && index < drops.length).toList();
+    final allowedIndexes = orderedIndexes.toSet();
+
+    if (previousIndex != currentIndex ||
+        previousShouldPlayCurrent != shouldPlayCurrent) {
+      _debugFocused(index: currentIndex, drops: drops);
+    }
+    _debug(
+      'sync current=$currentIndex shouldPlay=$shouldPlayCurrent '
+      'window=${orderedIndexes.join(',')} cached=${_controllers.keys.join(',')}',
+    );
+
+    final indexesToDispose = _controllers.keys
+        .where(
+          (index) =>
+              !allowedIndexes.contains(index) ||
+              _dropIds[index] != drops[index].id,
+        )
+        .toList();
+    for (final index in indexesToDispose) {
+      await disposeIndex(index);
+    }
+    _videoErrors.removeWhere((index, _) => !allowedIndexes.contains(index));
+
+    await _applyPlaybackState();
+
+    for (final index in orderedIndexes) {
+      if (!_controllers.containsKey(index) &&
+          !_initializing.contains(index) &&
+          !_videoErrors.containsKey(index)) {
+        unawaited(initialize(index: index, drops: drops));
+      } else {
+        _debug(
+          'reuse index=$index initialized='
+          '${_controllers[index]?.value.isInitialized ?? false} '
+          'initializing=${_initializing.contains(index)}',
+        );
+      }
+    }
+  }
+
+  Future<void> initialize({
+    required int index,
+    required List<Drop> drops,
+  }) async {
+    if (_isDisposed || index < 0 || index >= drops.length) return;
+    if (_controllers.containsKey(index) || _initializing.contains(index)) {
+      return;
+    }
+
+    _initializing.add(index);
+    _videoErrors.remove(index);
+    final generation = (_generations[index] ?? 0) + 1;
+    _generations[index] = generation;
+    _onChanged();
+
+    final dropId = drops[index].id;
+    final uri = _playbackUriFor(drops[index]);
+    _initializeTimers[index] = Stopwatch()..start();
+    _debug(
+      'create index=$index current=${index == _currentIndex} '
+      'urlKind=${_cloudinaryUrlKind(drops[index].playbackUrl, uri)} '
+      'url=${_maskedUrl(uri)} '
+      'metadata=${_metadataSummary(drops[index])}',
+    );
+    final controller = VideoPlayerController.networkUrl(uri);
+    _controllers[index] = controller;
+    _dropIds[index] = dropId;
+
+    try {
+      await controller.initialize();
+      await controller.setLooping(true);
+
+      if (_isDisposed ||
+          _controllers[index] != controller ||
+          _generations[index] != generation ||
+          _dropIds[index] != dropId) {
+        await controller.dispose();
+        return;
+      }
+
+      if (_shouldPlayIndex(index)) {
+        await _playController(index, controller, reason: 'initialize');
+      } else {
+        await controller.pause();
+        _debug('initialized preload paused index=$index');
+      }
+    } catch (error) {
+      if (_controllers[index] == controller &&
+          _generations[index] == generation) {
+        _controllers.remove(index);
+        _dropIds.remove(index);
+        _videoErrors[index] = error;
+      }
+      try {
+        await controller.dispose();
+      } catch (_) {
+        // Safe cleanup after platform initialization failures.
+      }
+    } finally {
+      final timer = _initializeTimers.remove(index);
+      timer?.stop();
+      if (_generations[index] == generation) {
+        _initializing.remove(index);
+        if (!_videoErrors.containsKey(index)) {
+          _initializeCompletedAt[index] = DateTime.now();
+        }
+      }
+      _debug(
+        'initialize complete index=$index elapsedMs='
+        '${timer?.elapsedMilliseconds ?? -1} '
+        'success=${_controllers[index]?.value.isInitialized ?? false} '
+        'preloadCompletedBeforeFocus='
+        '${_initializeCompletedAt[index] != null && _focusedAt[index] != null && _initializeCompletedAt[index]!.isBefore(_focusedAt[index]!)}',
+      );
+      _onChanged();
+    }
+  }
+
+  Future<void> retry({
+    required int index,
+    required List<Drop> drops,
+    required int currentIndex,
+    required bool shouldPlayCurrent,
+  }) async {
+    _videoErrors.remove(index);
+    await disposeIndex(index);
+    await initialize(index: index, drops: drops);
+  }
+
+  Future<void> pauseIndex(int index) async {
+    await _controllers[index]?.pause();
+  }
+
+  Future<void> pauseAll() async {
+    for (final controller in _controllers.values) {
+      await controller.pause();
+    }
+  }
+
+  Future<void> suppressPlayback() async {
+    if (_isDisposed) return;
+    _isPlaybackSuppressed = true;
+    await _applyPlaybackState();
+  }
+
+  Future<void> resumePlayback() async {
+    if (_isDisposed) return;
+    _isPlaybackSuppressed = false;
+    await _applyPlaybackState();
+  }
+
+  Future<void> disposeIndex(int index) async {
+    _generations[index] = (_generations[index] ?? 0) + 1;
+    _initializing.remove(index);
+    _initializeTimers.remove(index);
+    _initializeCompletedAt.remove(index);
+    _focusedAt.remove(index);
+    _loggedPlayFocusAt.remove(index);
+    final controller = _controllers.remove(index);
+    _dropIds.remove(index);
+    _videoErrors.remove(index);
+    if (controller == null) return;
+    try {
+      await controller.pause();
+    } catch (_) {
+      // Ignore platform races while a controller is initializing or closing.
+    }
+    try {
+      await controller.dispose();
+    } catch (_) {
+      // Ignore platform races while a controller is initializing or closing.
+    }
+    _debug('disposed index=$index remaining=${_controllers.keys.join(',')}');
+    _onChanged();
+  }
+
+  Future<void> disposeAll() async {
+    _isDisposed = true;
+    final indexes = _controllers.keys.toList();
+    for (final index in indexes) {
+      await disposeIndex(index);
+    }
+    _controllers.clear();
+    _initializing.clear();
+    _videoErrors.clear();
+    _generations.clear();
+    _dropIds.clear();
+    _currentIndex = null;
+    _shouldPlayCurrent = false;
+  }
+
+  bool _shouldPlayIndex(int index) {
+    return index == _currentIndex &&
+        _shouldPlayCurrent &&
+        _lifecycleAllowsPlayback &&
+        !_isPlaybackSuppressed;
+  }
+
+  Future<void> _applyPlaybackState() async {
+    if (_isDisposed) return;
+    for (final entry in _controllers.entries.toList()) {
+      final controller = entry.value;
+      if (!controller.value.isInitialized) continue;
+      if (_shouldPlayIndex(entry.key)) {
+        await _playController(entry.key, controller, reason: 'apply');
+      } else {
+        await controller.pause();
+      }
+    }
+  }
+
+  Future<void> _playController(
+    int index,
+    VideoPlayerController controller, {
+    required String reason,
+  }) async {
+    await controller.play();
+    final focusedAt = _focusedAt[index];
+    if (focusedAt == null || _loggedPlayFocusAt[index] == focusedAt) return;
+    _loggedPlayFocusAt[index] = focusedAt;
+    _debug(
+      'first play index=$index reason=$reason '
+      'focusToPlayMs=${DateTime.now().difference(focusedAt).inMilliseconds}',
+    );
+  }
+
+  void _debugFocused({required int index, required List<Drop> drops}) {
+    if (index < 0 || index >= drops.length) return;
+    final now = DateTime.now();
+    _focusedAt[index] = now;
+    final controller = _controllers[index];
+    final initializedAt = _initializeCompletedAt[index];
+    _debug(
+      'focus index=$index reused=${controller != null} '
+      'initialized=${controller?.value.isInitialized ?? false} '
+      'initializing=${_initializing.contains(index)} '
+      'preloadedBeforeSwipe=${initializedAt != null && initializedAt.isBefore(now)} '
+      'metadata=${_metadataSummary(drops[index])}',
+    );
+  }
+
+  Uri _playbackUriFor(Drop drop) {
+    final original = Uri.parse(drop.playbackUrl);
+    final optimized = _cloudinaryOptimizedUri(original);
+    return optimized ?? original;
+  }
+
+  Uri? _cloudinaryOptimizedUri(Uri uri) {
+    if (uri.host != 'res.cloudinary.com') return null;
+    final segments = uri.pathSegments;
+    final uploadIndex = segments.indexOf('upload');
+    if (uploadIndex < 0 || uploadIndex + 1 >= segments.length) return null;
+    final alreadyTransformed =
+        uploadIndex + 1 < segments.length &&
+        !segments[uploadIndex + 1].startsWith('v');
+    if (alreadyTransformed) return null;
+
+    final transformedSegments = <String>[
+      ...segments.take(uploadIndex + 1),
+      _cloudinaryPlaybackTransform,
+      ...segments.skip(uploadIndex + 1),
+    ];
+    return uri.replace(pathSegments: transformedSegments);
+  }
+
+  String _cloudinaryUrlKind(String originalUrl, Uri playbackUri) {
+    final original = Uri.tryParse(originalUrl);
+    if (original?.host != 'res.cloudinary.com') return 'non-cloudinary';
+    if (original.toString() == playbackUri.toString()) {
+      return 'cloudinary-original';
+    }
+    return 'cloudinary-optimized';
+  }
+
+  String _maskedUrl(Uri uri) {
+    final segments = uri.pathSegments
+        .map(
+          (segment) =>
+              segment.length > 28 ? '${segment.substring(0, 12)}...' : segment,
+        )
+        .toList();
+    return uri
+        .replace(pathSegments: segments, query: uri.hasQuery ? '...' : null)
+        .toString();
+  }
+
+  String _metadataSummary(Drop drop) {
+    final mb = drop.bytes / (1024 * 1024);
+    final bitrateMbps = drop.durationSeconds > 0
+        ? (drop.bytes * 8 / drop.durationSeconds) / (1000 * 1000)
+        : 0.0;
+    return 'bytes=${mb.toStringAsFixed(1)}MB '
+        'duration=${drop.durationSeconds.toStringAsFixed(1)}s '
+        'bitrate=${bitrateMbps.toStringAsFixed(1)}Mbps '
+        'size=${drop.width ?? '?'}x${drop.height ?? '?'} '
+        'format=${drop.format}';
+  }
+
+  void _debug(String message) {
+    if (!kDebugMode) return;
+    debugPrint('[DropVideoWindow] $message');
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _lifecycleAllowsPlayback = true;
+      unawaited(_applyPlaybackState());
+      return;
+    }
+
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _lifecycleAllowsPlayback = false;
+      unawaited(_applyPlaybackState());
+    }
+  }
+}
+
 class DropVideoPlayerItem extends StatefulWidget {
   final Drop drop;
   final bool isFocused;
+  final VideoPlayerController? controller;
+  final bool isInitializing;
+  final Object? videoError;
+  final bool showBackButton;
+  final VoidCallback onRetryVideo;
   final Function(Drop updatedDrop) onDropUpdated;
   final Future<void> Function(String dropId)? onToggleProps;
   final void Function(String dropId, int count)? onCommentsCountUpdated;
+  final Future<void> Function()? onPauseForOverlay;
+  final Future<void> Function()? onResumeAfterOverlay;
 
   const DropVideoPlayerItem({
     super.key,
     required this.drop,
     required this.isFocused,
+    required this.controller,
+    required this.isInitializing,
+    required this.videoError,
+    this.showBackButton = true,
+    required this.onRetryVideo,
     required this.onDropUpdated,
     this.onToggleProps,
     this.onCommentsCountUpdated,
+    this.onPauseForOverlay,
+    this.onResumeAfterOverlay,
   });
 
   @override
   State<DropVideoPlayerItem> createState() => _DropVideoPlayerItemState();
 }
 
-class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
-    with WidgetsBindingObserver {
-  VideoPlayerController? _controller;
-  bool _isInitialized = false;
+class _DropVideoPlayerItemState extends State<DropVideoPlayerItem> {
   bool _showPlayPauseIcon = false;
-  bool _isPlaying = false;
-  bool _hasVideoError = false;
   bool _isPropBusy = false;
   bool _isShortlistBusy = false;
-
-  // Double tap animation states
   bool _showFireOverlay = false;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    if (widget.isFocused) {
-      _initPlayer();
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant DropVideoPlayerItem oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isFocused && !oldWidget.isFocused) {
-      _initPlayer();
-    } else if (!widget.isFocused && oldWidget.isFocused) {
-      _disposePlayer();
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _disposePlayer();
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.detached) {
-      _controller?.pause();
-      if (mounted) {
-        setState(() {
-          _isPlaying = false;
-        });
-      }
-    } else if (state == AppLifecycleState.resumed &&
-        widget.isFocused &&
-        _isInitialized) {
-      _controller?.play();
-      if (mounted) {
-        setState(() {
-          _isPlaying = true;
-        });
-      }
-    }
-  }
-
-  Future<void> _initPlayer() async {
-    _disposePlayer();
-    setState(() {
-      _hasVideoError = false;
-    });
-    try {
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(widget.drop.playbackUrl),
-      );
-      await controller.initialize();
-      if (!mounted) return;
-
-      setState(() {
-        _controller = controller;
-        _isInitialized = true;
-        _isPlaying = true;
-      });
-      await controller.setLooping(true);
-      await controller.play();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _hasVideoError = true;
-      });
-    }
-  }
-
-  void _disposePlayer() {
-    _controller?.pause();
-    _controller?.dispose();
-    _controller = null;
-    _isInitialized = false;
-    _isPlaying = false;
-  }
-
   void _togglePlayPause() {
-    if (!_isInitialized || _controller == null) return;
+    final controller = widget.controller;
+    if (!widget.isFocused ||
+        controller == null ||
+        !controller.value.isInitialized) {
+      return;
+    }
 
     setState(() {
       _showPlayPauseIcon = true;
     });
 
-    if (_controller!.value.isPlaying) {
-      _controller!.pause();
-      setState(() {
-        _isPlaying = false;
-      });
+    if (controller.value.isPlaying) {
+      controller.pause();
     } else {
-      _controller!.play();
-      setState(() {
-        _isPlaying = true;
-      });
+      controller.play();
     }
 
     Future.delayed(const Duration(milliseconds: 600), () {
@@ -264,7 +589,6 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
         await publicProfileCubit.togglePropOnDrop(widget.drop.id);
       }
     } catch (_) {
-      // Rollback on failure
       final rollbackDrop = widget.drop.copyWith(
         hasPropped: originalHasPropped,
         propsCount: originalPropsCount,
@@ -275,8 +599,10 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
     }
   }
 
-  void _showComments() {
-    showModalBottomSheet(
+  Future<void> _showComments() async {
+    await widget.onPauseForOverlay?.call();
+    if (!mounted) return;
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -289,6 +615,8 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
         },
       ),
     );
+    if (!mounted) return;
+    await widget.onResumeAfterOverlay?.call();
   }
 
   Future<void> _copyDropLink() async {
@@ -322,6 +650,7 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
     final authState = context.watch<AuthCubit>().state;
     final isScout =
         authState is AuthAuthenticated && authState.user.role == 'scout';
+    final controller = widget.controller;
 
     return GestureDetector(
       onTap: _togglePlayPause,
@@ -329,56 +658,13 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Background Black
           Container(color: Colors.black),
-
-          // Video Player or Loader
-          if (_isInitialized && _controller != null)
-            Center(
-              child: AspectRatio(
-                aspectRatio: _controller!.value.aspectRatio,
-                child: VideoPlayer(_controller!),
-              ),
-            )
-          else if (_hasVideoError)
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.error_outline_rounded,
-                    color: Colors.white70,
-                    size: 40,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Drop unavailable',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _initPlayer,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('RETRY'),
-                  ),
-                ],
-              ),
-            )
+          if (controller != null)
+            _DropVideoSurface(controller: controller, drop: widget.drop)
+          else if (widget.videoError != null)
+            _DropVideoError(onRetry: widget.onRetryVideo)
           else
-            Stack(
-              fit: StackFit.expand,
-              children: [
-                if (widget.drop.thumbnailUrl != null)
-                  Image.network(
-                    widget.drop.thumbnailUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                  ),
-                const Center(child: CircularProgressIndicator()),
-              ],
-            ),
-
-          // Sc scrim overlay
+            _DropPoster(drop: widget.drop, showLoader: widget.isInitializing),
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -396,8 +682,6 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
               ),
             ),
           ),
-
-          // Double Tap Fire Overlay Pop Animation
           if (_showFireOverlay)
             const Center(
               child: AnimatedOpacity(
@@ -411,58 +695,63 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
                 ),
               ),
             ),
-
-          // Play/Pause Overlay Indicator
-          if (_showPlayPauseIcon)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
-                  color: Colors.black45,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  _isPlaying ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                  size: 40,
+          if (_showPlayPauseIcon && controller != null)
+            ValueListenableBuilder<VideoPlayerValue>(
+              valueListenable: controller,
+              builder: (context, value, _) {
+                return Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(
+                      color: Colors.black45,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      value.isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      size: 40,
+                      color: Colors.white,
+                    ),
+                  ),
+                );
+              },
+            ),
+          if (widget.showBackButton)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 16,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_rounded,
                   color: Colors.white,
+                  size: 28,
                 ),
+                onPressed: () => Navigator.pop(context),
               ),
             ),
-
-          // Close Button (Top Left)
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            left: 16,
-            child: IconButton(
-              icon: const Icon(
-                Icons.arrow_back_rounded,
-                color: Colors.white,
-                size: 28,
-              ),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
-
-          // Bottom & Side Overlays
           Positioned(
             bottom: 30,
             left: 16,
-            right: 80, // Space for side buttons
+            right: 80,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Athlete Name & Username
                 GestureDetector(
-                  onTap: () {
+                  onTap: () async {
                     if (widget.drop.user != null) {
-                      Navigator.push(
+                      await widget.onPauseForOverlay?.call();
+                      if (!context.mounted) return;
+                      await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) =>
                               PublicProfileScreen(userId: widget.drop.userId),
                         ),
                       );
+                      if (!context.mounted) return;
+                      await widget.onResumeAfterOverlay?.call();
                     }
                   },
                   child: Row(
@@ -506,8 +795,6 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
                   ),
                 ),
                 const SizedBox(height: 12),
-
-                // Caption
                 if (widget.drop.caption != null &&
                     widget.drop.caption!.isNotEmpty)
                   Text(
@@ -517,8 +804,6 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
                     style: const TextStyle(color: Colors.white, fontSize: 14),
                   ),
                 const SizedBox(height: 8),
-
-                // Sport and Category Badges
                 Row(
                   children: [
                     if (widget.drop.sport?.name != null)
@@ -571,15 +856,12 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
               ],
             ),
           ),
-
-          // Side Actions Overlay (Right Side)
           Positioned(
             bottom: 40,
             right: 12,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Fire Action
                 _buildSideAction(
                   icon: widget.drop.hasPropped
                       ? Icons.local_fire_department_rounded
@@ -591,8 +873,6 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
                   onTap: _triggerProp,
                 ),
                 const SizedBox(height: 20),
-
-                // Comments Action
                 _buildSideAction(
                   icon: Icons.comment_rounded,
                   color: Colors.white,
@@ -600,8 +880,6 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
                   onTap: _showComments,
                 ),
                 const SizedBox(height: 20),
-
-                // Copy Link Action
                 _buildSideAction(
                   icon: Icons.link_rounded,
                   color: Colors.white,
@@ -654,6 +932,116 @@ class _DropVideoPlayerItemState extends State<DropVideoPlayerItem>
           ),
         ),
       ],
+    );
+  }
+}
+
+class _DropVideoSurface extends StatelessWidget {
+  final VideoPlayerController controller;
+  final Drop drop;
+
+  const _DropVideoSurface({required this.controller, required this.drop});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        final isReady = value.isInitialized;
+        final showPoster =
+            !isReady || value.isBuffering || value.position == Duration.zero;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            _DropPoster(drop: drop, showLoader: false),
+            if (isReady && value.size.width > 0 && value.size.height > 0)
+              Positioned.fill(
+                child: FittedBox(
+                  fit: BoxFit.contain,
+                  child: SizedBox(
+                    width: value.size.width,
+                    height: value.size.height,
+                    child: VideoPlayer(controller),
+                  ),
+                ),
+              ),
+            if (showPoster)
+              _DropPoster(
+                drop: drop,
+                showLoader: !isReady || value.isBuffering,
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _DropPoster extends StatelessWidget {
+  final Drop drop;
+  final bool showLoader;
+
+  const _DropPoster({required this.drop, required this.showLoader});
+
+  @override
+  Widget build(BuildContext context) {
+    final posterUrl =
+        drop.thumbnailUrl ?? _thumbnailUrlFromPlaybackUrl(drop.playbackUrl);
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (posterUrl != null)
+          Image.network(
+            posterUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
+        if (showLoader) const Center(child: CircularProgressIndicator()),
+      ],
+    );
+  }
+
+  String? _thumbnailUrlFromPlaybackUrl(String playbackUrl) {
+    final uri = Uri.tryParse(playbackUrl);
+    if (uri == null || uri.host != 'res.cloudinary.com') return null;
+    return playbackUrl.replaceFirst(
+      RegExp(r'\.(mp4|mov|webm)(\?.*)?$', caseSensitive: false),
+      '.jpg',
+    );
+  }
+}
+
+class _DropVideoError extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _DropVideoError({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Colors.white70,
+            size: 40,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Drop unavailable',
+            style: TextStyle(color: Colors.white70),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('RETRY'),
+          ),
+        ],
+      ),
     );
   }
 }

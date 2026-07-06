@@ -35,51 +35,108 @@ class DropModel extends Drop {
   });
 
   factory DropModel.fromJson(Map<String, dynamic> json) {
+    var currentField = '<start>';
     try {
-      final userMap = _mapOrNull(json['user'] ?? json['athlete']);
-      final sportMap = _mapOrNull(json['sport']);
-      final catMap = _mapOrNull(json['category']);
+      T parseField<T>(String field, T Function(Object? value) parse) {
+        currentField = field;
+        final value = json[field];
+        _debugDropField(json, field, value == null);
+        try {
+          return parse(value);
+        } catch (error) {
+          _debugDropField(
+            json,
+            field,
+            value == null,
+            exceptionType: error.runtimeType.toString(),
+          );
+          rethrow;
+        }
+      }
 
-      final createdAt = _dateTimeOrNow(json['created_at']);
+      currentField = 'user';
+      _debugDropField(json, 'user', (json['user'] ?? json['athlete']) == null);
+      final userMap = _mapOrNull(json['user'] ?? json['athlete']);
+      final sportMap = parseField('sport', _mapOrNull);
+      final catMap = parseField('category', _mapOrNull);
+
+      final createdAt = parseField('created_at', _dateTimeOrNow);
       return DropModel(
-        id: _requiredString(json, 'id'),
-        userId: _requiredString(json, 'user_id'),
-        playerProfileId: _stringOrNull(json['player_profile_id']),
-        sportId: _requiredString(json, 'sport_id'),
-        categoryId: _stringOrNull(json['category_id']),
-        provider: _stringOrDefault(json['provider'], 'cloudinary'),
-        providerAssetId: _requiredString(json, 'provider_asset_id'),
-        publicId: _requiredString(json, 'public_id'),
-        playbackUrl: _requiredString(json, 'playback_url'),
-        thumbnailUrl: _stringOrNull(json['thumbnail_url']),
-        caption: _stringOrNull(json['caption']),
-        durationSeconds: _doubleOrDefault(json['duration_seconds']),
-        width: _intOrNull(json['width']),
-        height: _intOrNull(json['height']),
-        format: _requiredString(json, 'format'),
-        bytes: _intOrDefault(json['bytes']),
-        moderationStatus: _stringOrDefault(
-          json['moderation_status'],
-          'approved',
+        id: parseField('id', (value) => _requiredString(json, 'id')),
+        userId: parseField(
+          'user_id',
+          (value) => _requiredString(json, 'user_id'),
         ),
-        visibility: _stringOrDefault(json['visibility'], 'public'),
+        playerProfileId: parseField('player_profile_id', _stringOrNull),
+        sportId: parseField(
+          'sport_id',
+          (value) => _requiredString(json, 'sport_id'),
+        ),
+        categoryId: parseField('category_id', _stringOrNull),
+        provider: parseField(
+          'provider',
+          (value) => _requiredString(json, 'provider'),
+        ),
+        providerAssetId: parseField(
+          'provider_asset_id',
+          (value) => _requiredString(json, 'provider_asset_id'),
+        ),
+        publicId: parseField(
+          'public_id',
+          (value) => _requiredString(json, 'public_id'),
+        ),
+        playbackUrl: parseField(
+          'playback_url',
+          (value) => _requiredString(json, 'playback_url'),
+        ),
+        thumbnailUrl: parseField('thumbnail_url', _stringOrNull),
+        caption: parseField('caption', _stringOrNull),
+        durationSeconds: parseField('duration_seconds', _doubleOrDefault),
+        width: parseField('width', _intOrNull),
+        height: parseField('height', _intOrNull),
+        format: parseField(
+          'format',
+          (value) => _requiredString(json, 'format'),
+        ),
+        bytes: parseField('bytes', _intOrDefault),
+        moderationStatus: parseField(
+          'moderation_status',
+          (value) => _stringOrDefault(value, 'approved'),
+        ),
+        visibility: parseField(
+          'visibility',
+          (value) => _stringOrDefault(value, 'public'),
+        ),
         createdAt: createdAt,
-        updatedAt: _dateTimeOrDefault(json['updated_at'], createdAt),
-        propsCount: _intOrDefault(json['props_count']),
-        commentsCount: _intOrDefault(json['comments_count']),
+        updatedAt: parseField(
+          'updated_at',
+          (value) => _dateTimeOrDefault(value, createdAt),
+        ),
+        propsCount: parseField('props_count', _intOrDefault),
+        commentsCount: parseField('comments_count', _intOrDefault),
         hasPropped:
-            _boolOrDefault(json['has_propped']) ??
-            _boolOrDefault(json['current_user_gave_props']) ??
+            parseField('has_propped', _boolOrDefault) ??
+            parseField('current_user_gave_props', _boolOrDefault) ??
             false,
-        user: userMap != null ? UserModel.fromJson(userMap) : null,
-        sport: sportMap != null ? SportModel.fromJson(sportMap) : null,
-        category: catMap != null ? SportCategoryModel.fromJson(catMap) : null,
+        user: userMap != null
+            ? parseField('user', (value) => UserModel.fromJson(userMap))
+            : null,
+        sport: sportMap != null
+            ? parseField('sport', (value) => SportModel.fromJson(sportMap))
+            : null,
+        category: catMap != null
+            ? parseField(
+                'category',
+                (value) => SportCategoryModel.fromJson(catMap),
+              )
+            : null,
       );
     } catch (error) {
       if (kDebugMode) {
         debugPrint(
-          '[DropModel] parse failed: ${error.runtimeType}: $error '
-          'keys=${json.keys.toList()}',
+          '[DropModel] model=DropModel keys=${json.keys.toList()} '
+          'field=$currentField isNull=${json[currentField] == null} '
+          'exception=${error.runtimeType}',
         );
       }
       rethrow;
@@ -113,6 +170,19 @@ class DropModel extends Drop {
       'has_propped': hasPropped,
     };
   }
+}
+
+void _debugDropField(
+  Map<String, dynamic> json,
+  String field,
+  bool isNull, {
+  String exceptionType = 'none',
+}) {
+  if (!kDebugMode) return;
+  debugPrint(
+    '[DropModel] model=DropModel keys=${json.keys.toList()} '
+    'field=$field isNull=$isNull exception=$exceptionType',
+  );
 }
 
 Map<String, dynamic>? _mapOrNull(Object? value) {

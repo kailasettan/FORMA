@@ -12,12 +12,12 @@ class SportCategoryModel extends SportCategory {
 
   factory SportCategoryModel.fromJson(Map<String, dynamic> json) {
     return SportCategoryModel(
-      id: json['id'] as String,
-      sportId: json['sport_id'] as String,
-      name: json['name'] as String,
-      slug: json['slug'] as String,
-      isActive: json['is_active'] as bool,
-      displayOrder: json['display_order'] as int,
+      id: _requiredString(json, 'id'),
+      sportId: _requiredString(json, 'sport_id'),
+      name: _requiredString(json, 'name'),
+      slug: _requiredString(json, 'slug'),
+      isActive: json['is_active'] as bool? ?? true,
+      displayOrder: (json['display_order'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -31,4 +31,10 @@ class SportCategoryModel extends SportCategory {
       'display_order': displayOrder,
     };
   }
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is String && value.isNotEmpty) return value;
+  throw FormatException('Sport category response missing required field: $key');
 }

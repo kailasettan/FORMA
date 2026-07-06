@@ -128,6 +128,7 @@ class ApiClient {
           .timeout(const Duration(seconds: 15));
 
       _debugLogResponse('DELETE', uri, response.statusCode);
+      _debugLogResponseBody('DELETE', uri, response.statusCode, response.body);
       return _handleResponse(response);
     } catch (e) {
       _debugLogError('DELETE', uri, e);

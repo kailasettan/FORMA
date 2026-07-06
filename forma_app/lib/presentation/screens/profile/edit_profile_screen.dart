@@ -1,11 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/entities/sport.dart';
 import '../../../domain/repositories/profile_repository.dart';
 import '../../cubits/auth_cubit.dart';
 import '../../cubits/catalog_cubit.dart';
 import '../../theme.dart';
+import 'profile_dropdown_safety.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final User user;
@@ -24,10 +28,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _bioController;
   late TextEditingController _locationController;
   late TextEditingController _opportunitiesController;
-  late TextEditingController _photoUrlController;
 
+  final _imagePicker = ImagePicker();
+  File? _selectedProfilePhotoFile;
+  bool _isSaving = false;
   String? _selectedAvailability;
   String? _selectedFocusedSportId;
+  Set<String> _validFocusedSportIds = {};
 
   final List<String> _availabilityOptions = [
     'Open to trials',
@@ -47,9 +54,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _bioController = TextEditingController(text: widget.user.bio ?? '');
     _locationController = TextEditingController(
       text: widget.user.location ?? '',
-    );
-    _photoUrlController = TextEditingController(
-      text: widget.user.profilePhotoUrl ?? '',
     );
 
     final opportunitiesList = widget.user.preferredOpportunityTypes ?? [];
@@ -73,11 +77,55 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _bioController.dispose();
     _locationController.dispose();
     _opportunitiesController.dispose();
-    _photoUrlController.dispose();
     super.dispose();
   }
 
+  Future<void> _pickProfilePhoto() async {
+    final file = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1000,
+      maxHeight: 1000,
+      imageQuality: 88,
+    );
+    if (file == null || !mounted) return;
+
+    if (!_isAllowedProfileImage(file.path)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please choose a JPG, PNG, or WEBP image.'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _selectedProfilePhotoFile = File(file.path);
+    });
+  }
+
+  ImageProvider? _profilePhotoImage() {
+    final selectedFile = _selectedProfilePhotoFile;
+    if (selectedFile != null) return FileImage(selectedFile);
+
+    final currentUrl = widget.user.profilePhotoUrl;
+    if (currentUrl != null && currentUrl.isNotEmpty) {
+      return NetworkImage(currentUrl);
+    }
+
+    return null;
+  }
+
+  bool _isAllowedProfileImage(String path) {
+    final lower = path.toLowerCase();
+    return lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp');
+  }
+
   void _submit() async {
+    if (_isSaving) return;
     if (_formKey.currentState!.validate()) {
       final opportunitiesText = _opportunitiesController.text.trim();
       final List<String> opportunities = opportunitiesText.isNotEmpty
@@ -89,7 +137,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           : [];
 
       try {
+        setState(() {
+          _isSaving = true;
+        });
         final profileRepo = context.read<ProfileRepository>();
+        var profilePhotoUrl = widget.user.profilePhotoUrl;
+        final selectedPhotoFile = _selectedProfilePhotoFile;
+        if (selectedPhotoFile != null) {
+          final signature = await profileRepo.getProfilePhotoUploadSignature();
+          final cloudinaryResponse = await profileRepo
+              .uploadProfilePhotoToCloudinary(
+                file: selectedPhotoFile,
+                signatureData: signature,
+              );
+          profilePhotoUrl = cloudinaryResponse['secure_url'] as String;
+        }
+
         final updatedUser = await profileRepo.updateMe(
           fullName: _fullNameController.text.trim(),
           headline: _headlineController.text.trim().isNotEmpty
@@ -101,14 +164,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           location: _locationController.text.trim().isNotEmpty
               ? _locationController.text.trim()
               : null,
-          profilePhotoUrl: _photoUrlController.text.trim().isNotEmpty
-              ? _photoUrlController.text.trim()
-              : null,
+          profilePhotoUrl: profilePhotoUrl,
           availability: _selectedAvailability,
           preferredOpportunityTypes: opportunities.isNotEmpty
               ? opportunities
               : null,
-          focusedSportId: _selectedFocusedSportId,
+          focusedSportId:
+              _validFocusedSportIds.contains(_selectedFocusedSportId)
+              ? _selectedFocusedSportId
+              : null,
         );
 
         // Update auth state in AuthCubit
@@ -120,10 +184,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               backgroundColor: AppTheme.success,
             ),
           );
-          Navigator.pop(context);
+          Navigator.pop(context, updatedUser);
         }
       } catch (e) {
         if (mounted) {
+          setState(() {
+            _isSaving = false;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Failed to update profile: $e'),
@@ -143,8 +210,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         builder: (context, catalogState) {
           List<Sport> sports = [];
           if (catalogState is CatalogLoaded) {
-            sports = catalogState.sports;
+            sports = uniqueByDropdownId(
+              catalogState.sports,
+              (sport) => sport.id,
+              debugLabel: 'EditProfile.focusedSport',
+            );
           }
+          _validFocusedSportIds = sports.map((sport) => sport.id).toSet();
+          final safeAvailability = safeDropdownValue(
+            _selectedAvailability,
+            _availabilityOptions,
+            (option) => option,
+            debugLabel: 'EditProfile.availability',
+          );
+          final safeFocusedSportId = safeDropdownValue(
+            _selectedFocusedSportId,
+            sports,
+            (sport) => sport.id,
+            debugLabel: 'EditProfile.focusedSport',
+          );
 
           return SafeArea(
             child: SingleChildScrollView(
@@ -156,6 +240,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   children: [
                     TextFormField(
                       controller: _fullNameController,
+                      enabled: !_isSaving,
                       decoration: const InputDecoration(
                         labelText: 'Full Name',
                         prefixIcon: Icon(Icons.person_outline),
@@ -169,17 +254,40 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                     const SizedBox(height: 18),
 
-                    TextFormField(
-                      controller: _photoUrlController,
-                      decoration: const InputDecoration(
-                        labelText: 'Profile Photo URL',
-                        prefixIcon: Icon(Icons.image_outlined),
+                    Center(
+                      child: Column(
+                        children: [
+                          GestureDetector(
+                            onTap: _isSaving ? null : _pickProfilePhoto,
+                            child: CircleAvatar(
+                              radius: 48,
+                              backgroundColor: AppTheme.primary.withValues(
+                                alpha: 0.12,
+                              ),
+                              foregroundImage: _profilePhotoImage(),
+                              child: _profilePhotoImage() == null
+                                  ? const Icon(
+                                      Icons.person_rounded,
+                                      size: 42,
+                                      color: AppTheme.primary,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextButton.icon(
+                            onPressed: _isSaving ? null : _pickProfilePhoto,
+                            icon: const Icon(Icons.photo_camera_outlined),
+                            label: const Text('Change photo'),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 18),
 
                     TextFormField(
                       controller: _headlineController,
+                      enabled: !_isSaving,
                       decoration: const InputDecoration(
                         labelText: 'Headline (e.g. Badminton Singles Player)',
                         prefixIcon: Icon(Icons.flash_on_outlined),
@@ -189,6 +297,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                     TextFormField(
                       controller: _bioController,
+                      enabled: !_isSaving,
                       maxLines: 3,
                       decoration: const InputDecoration(
                         labelText: 'Athlete Bio',
@@ -203,6 +312,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                     TextFormField(
                       controller: _locationController,
+                      enabled: !_isSaving,
                       decoration: const InputDecoration(
                         labelText: 'Location (e.g. California, US)',
                         prefixIcon: Icon(Icons.location_on_outlined),
@@ -212,7 +322,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                     // Availability Status Dropdown
                     DropdownButtonFormField<String>(
-                      initialValue: _selectedAvailability,
+                      key: ValueKey('availability-$safeAvailability'),
+                      initialValue: safeAvailability,
                       decoration: const InputDecoration(
                         labelText: 'Availability Status',
                         prefixIcon: Icon(Icons.event_available_rounded),
@@ -221,6 +332,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         return DropdownMenuItem(value: opt, child: Text(opt));
                       }).toList(),
                       onChanged: (val) {
+                        if (_isSaving) return;
                         setState(() {
                           _selectedAvailability = val;
                         });
@@ -230,7 +342,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                     // Focused Sport Dropdown
                     DropdownButtonFormField<String>(
-                      initialValue: _selectedFocusedSportId,
+                      key: ValueKey('focused-sport-$safeFocusedSportId'),
+                      initialValue: safeFocusedSportId,
                       decoration: const InputDecoration(
                         labelText: 'Focused Sport',
                         prefixIcon: Icon(Icons.star_rounded),
@@ -248,6 +361,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         }),
                       ],
                       onChanged: (val) {
+                        if (_isSaving) return;
                         setState(() {
                           _selectedFocusedSportId = val;
                         });
@@ -257,6 +371,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                     TextFormField(
                       controller: _opportunitiesController,
+                      enabled: !_isSaving,
                       decoration: const InputDecoration(
                         labelText: 'Preferred Opportunities (comma separated)',
                         hintText: 'Trials, Teams, Coaching, Competitions',
@@ -266,8 +381,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     const SizedBox(height: 32),
 
                     ElevatedButton(
-                      onPressed: _submit,
-                      child: const Text('SAVE PROFILE'),
+                      onPressed: _isSaving ? null : _submit,
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Text('SAVE PROFILE'),
                     ),
                   ],
                 ),

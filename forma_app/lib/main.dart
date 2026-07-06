@@ -27,6 +27,7 @@ import 'presentation/cubits/user_search_cubit.dart';
 import 'presentation/cubits/scout_shortlist_cubit.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/dashboard_screen.dart';
+import 'presentation/screens/splash_screen.dart';
 import 'presentation/theme.dart';
 import 'presentation/router.dart';
 
@@ -175,6 +176,8 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
+  bool _showSplash = true;
+
   @override
   void initState() {
     super.initState();
@@ -183,6 +186,17 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
+    if (_showSplash) {
+      return SplashScreen(
+        onComplete: () {
+          if (!mounted) return;
+          setState(() {
+            _showSplash = false;
+          });
+        },
+      );
+    }
+
     return BlocBuilder<AuthCubit, AuthState>(
       builder: (context, state) {
         if (state is AuthAuthenticated) {

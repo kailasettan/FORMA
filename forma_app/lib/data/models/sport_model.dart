@@ -12,12 +12,12 @@ class SportModel extends Sport {
 
   factory SportModel.fromJson(Map<String, dynamic> json) {
     return SportModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      slug: json['slug'] as String,
+      id: _requiredString(json, 'id'),
+      name: _requiredString(json, 'name'),
+      slug: _requiredString(json, 'slug'),
       iconUrl: json['icon_url'] as String?,
-      isActive: json['is_active'] as bool,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      isActive: json['is_active'] as bool? ?? true,
+      createdAt: _dateTimeOrNow(json['created_at']),
     );
   }
 
@@ -31,4 +31,17 @@ class SportModel extends Sport {
       'created_at': createdAt.toIso8601String(),
     };
   }
+}
+
+String _requiredString(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is String && value.isNotEmpty) return value;
+  throw FormatException('Sport response missing required field: $key');
+}
+
+DateTime _dateTimeOrNow(Object? value) {
+  if (value is String) {
+    return DateTime.tryParse(value) ?? DateTime.now().toUtc();
+  }
+  return DateTime.now().toUtc();
 }

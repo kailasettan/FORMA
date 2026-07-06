@@ -13,6 +13,18 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/signup", response_model=AuthOut, status_code=status.HTTP_201_CREATED)
 def signup(payload: SignUpIn, db: Session = Depends(get_db)) -> AuthOut:
+    requested_role = payload.role.lower().strip()
+    if requested_role == "scout":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Scout accounts cannot be created from public signup.",
+        )
+    if requested_role != "athlete":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Public signup role must be athlete.",
+        )
+
     existing = db.scalar(
         select(User).where((User.username == payload.username) | (User.email == payload.email))
     )
@@ -28,7 +40,7 @@ def signup(payload: SignUpIn, db: Session = Depends(get_db)) -> AuthOut:
         email=payload.email,
         password_hash=hash_password(payload.password),
         full_name=payload.full_name,
-        role=payload.role,
+        role="athlete",
     )
     db.add(user)
     try:

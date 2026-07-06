@@ -4,9 +4,11 @@ import 'package:flutter/foundation.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/entities/drop.dart';
 import '../../../domain/entities/player_profile.dart';
+import '../../cubits/auth_cubit.dart';
 import '../../cubits/profile_cubit.dart';
 import '../../cubits/drop_cubit.dart';
 import '../../cubits/drop_feed_cubit.dart';
+import '../../router.dart';
 import '../../theme.dart';
 import '../drops/drop_viewer_screen.dart';
 import '../drops/drop_upload_screen.dart';
@@ -22,13 +24,31 @@ class OwnProfileSection extends StatefulWidget {
 }
 
 class _OwnProfileSectionState extends State<OwnProfileSection> {
+  String? _lastProfilePhotoUrl;
+
   @override
   void initState() {
     super.initState();
+    _lastProfilePhotoUrl = widget.user.profilePhotoUrl;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProfileCubit>().loadProfiles(widget.user.id);
       context.read<DropCubit>().loadUserDrops(widget.user.id);
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant OwnProfileSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.user.profilePhotoUrl != widget.user.profilePhotoUrl) {
+      _evictProfilePhoto(oldWidget.user.profilePhotoUrl);
+      _evictProfilePhoto(widget.user.profilePhotoUrl);
+      _lastProfilePhotoUrl = widget.user.profilePhotoUrl;
+    }
+  }
+
+  void _evictProfilePhoto(String? url) {
+    if (url == null || url.isEmpty) return;
+    NetworkImage(url).evict();
   }
 
   int _calculateCompletion(List<PlayerProfile> profiles, List<Drop> drops) {
@@ -219,6 +239,16 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                       ],
                                     ),
                                   ),
+                                  IconButton(
+                                    tooltip: 'Settings',
+                                    icon: const Icon(Icons.settings_rounded),
+                                    onPressed: () {
+                                      Navigator.pushNamed(
+                                        context,
+                                        AppRouter.settings,
+                                      );
+                                    },
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 16),
@@ -270,14 +300,32 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                                 children: [
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => EditProfileScreen(
-                                              user: widget.user,
-                                            ),
-                                          ),
+                                      onPressed: () async {
+                                        final authCubit = context
+                                            .read<AuthCubit>();
+                                        final updatedUser =
+                                            await Navigator.push<User>(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    EditProfileScreen(
+                                                      user: widget.user,
+                                                    ),
+                                              ),
+                                            );
+                                        if (!mounted || updatedUser == null) {
+                                          return;
+                                        }
+                                        _evictProfilePhoto(
+                                          _lastProfilePhotoUrl,
+                                        );
+                                        _evictProfilePhoto(
+                                          updatedUser.profilePhotoUrl,
+                                        );
+                                        _lastProfilePhotoUrl =
+                                            updatedUser.profilePhotoUrl;
+                                        authCubit.updateCurrentUser(
+                                          updatedUser,
                                         );
                                       },
                                       icon: const Icon(
@@ -491,7 +539,7 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                           child: Padding(
                             padding: EdgeInsets.all(20.0),
                             child: Text(
-                              'Add your first sport specialization card above.',
+                              'Add your sport specialization',
                               textAlign: TextAlign.center,
                               style: TextStyle(color: AppTheme.textSecondary),
                             ),
@@ -531,6 +579,7 @@ class _OwnProfileSectionState extends State<OwnProfileSection> {
                               'Role: ${p.roleOrDiscipline ?? p.position ?? "N/A"} • Level: ${p.skillLevel.toUpperCase()}',
                             ),
                             trailing: IconButton(
+                              tooltip: 'Edit specialization',
                               icon: const Icon(
                                 Icons.edit_outlined,
                                 color: AppTheme.primary,

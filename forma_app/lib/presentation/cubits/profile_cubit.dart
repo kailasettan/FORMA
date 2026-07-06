@@ -90,4 +90,20 @@ class ProfileCubit extends Cubit<ProfileState> {
       emit(ProfileError(e.toString()));
     }
   }
+
+  Future<bool> deleteProfile({
+    required String profileId,
+    required String userId,
+  }) async {
+    emit(ProfileSubmitting());
+    try {
+      await _profileRepository.deletePlayerProfile(profileId);
+      emit(ProfileSuccess());
+      await loadProfiles(userId);
+      return true;
+    } catch (e) {
+      emit(ProfileError(e.toString()));
+      return false;
+    }
+  }
 }

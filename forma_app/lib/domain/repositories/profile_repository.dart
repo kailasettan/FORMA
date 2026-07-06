@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../entities/player_profile.dart';
 import '../entities/user.dart';
 import '../entities/public_athlete_profile.dart';
@@ -15,6 +17,15 @@ abstract class ProfileRepository {
     String profileId, {
     String? roleOrDiscipline,
     String? skillLevel,
+  });
+
+  Future<void> deletePlayerProfile(String profileId);
+
+  Future<Map<String, dynamic>> getProfilePhotoUploadSignature();
+
+  Future<Map<String, dynamic>> uploadProfilePhotoToCloudinary({
+    required File file,
+    required Map<String, dynamic> signatureData,
   });
 
   Future<User> updateMe({

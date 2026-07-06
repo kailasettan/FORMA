@@ -115,5 +115,70 @@ void main() {
       expect(drop.category, isNull);
       expect(drop.updatedAt, drop.createdAt);
     });
+
+    test('DropModel parses sparse POST /drops response after publish', () {
+      final json = {
+        'id': '018fa0dc-5c63-73bb-a40f-020ace15ca9f',
+        'user_id': '018fa0dc-5c63-73bb-a40f-020ace15ca9a',
+        'player_profile_id': null,
+        'sport_id': '018fa0dc-5c63-73bb-a40f-020ace15ca9b',
+        'category_id': null,
+        'provider': 'cloudinary',
+        'provider_asset_id': 'asset_123',
+        'public_id': 'forma/skill_clips/drop_123',
+        'playback_url': 'https://res.cloudinary.com/demo/video/upload/drop.mp4',
+        'thumbnail_url': null,
+        'caption': null,
+        'duration_seconds': 12.4,
+        'width': null,
+        'height': null,
+        'format': 'mp4',
+        'bytes': 1024,
+        'moderation_status': 'approved',
+        'visibility': 'public',
+        'created_at': '2026-07-03T12:00:00Z',
+        'updated_at': '2026-07-03T12:00:00Z',
+        'user': {
+          'id': '018fa0dc-5c63-73bb-a40f-020ace15ca9a',
+          'username': 'athlete',
+          'full_name': 'Athlete One',
+          'age': null,
+          'city': null,
+          'profile_photo_url': null,
+          'created_at': '2026-07-02T12:00:00Z',
+          'headline': null,
+          'bio': null,
+          'location': null,
+          'availability': null,
+          'role': 'athlete',
+          'focused_sport_id': null,
+        },
+        'sport': {
+          'id': '018fa0dc-5c63-73bb-a40f-020ace15ca9b',
+          'name': 'Football',
+          'slug': 'football',
+          'icon_url': null,
+          'is_active': true,
+          'created_at': '2026-07-02T12:00:00Z',
+        },
+        'category': null,
+      };
+
+      final drop = DropModel.fromJson(json);
+
+      expect(drop.thumbnailUrl, isNull);
+      expect(drop.caption, isNull);
+      expect(drop.categoryId, isNull);
+      expect(drop.playerProfileId, isNull);
+      expect(drop.user?.profilePhotoUrl, isNull);
+      expect(drop.sport?.iconUrl, isNull);
+      expect(drop.category, isNull);
+      expect(drop.width, isNull);
+      expect(drop.height, isNull);
+      expect(drop.propsCount, 0);
+      expect(drop.commentsCount, 0);
+      expect(drop.hasPropped, isFalse);
+      expect(drop.user?.email, '');
+    });
   });
 }

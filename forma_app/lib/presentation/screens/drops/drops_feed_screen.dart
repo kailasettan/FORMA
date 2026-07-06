@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../domain/entities/drop.dart';
 import '../../../domain/entities/sport.dart';
 import '../../cubits/catalog_cubit.dart';
 import '../../cubits/drop_feed_cubit.dart';
@@ -18,6 +19,7 @@ class DropsFeedScreen extends StatefulWidget {
 class _DropsFeedScreenState extends State<DropsFeedScreen>
     with AutomaticKeepAliveClientMixin {
   final PageController _pageController = PageController();
+  late final DropVideoControllerWindow _videoWindow;
   int _focusedIndex = 0;
 
   @override
@@ -26,6 +28,8 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
   @override
   void initState() {
     super.initState();
+    _videoWindow = DropVideoControllerWindow(_refreshVideoState);
+    WidgetsBinding.instance.addObserver(_videoWindow);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CatalogCubit>().loadSportsAndCategories();
       context.read<DropFeedCubit>().loadInitial();
@@ -33,12 +37,41 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
   }
 
   @override
+  void didUpdateWidget(covariant DropsFeedScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive != oldWidget.isActive) {
+      _syncVideoWindow(context.read<DropFeedCubit>().state.drops);
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(_videoWindow);
+    _videoWindow.disposeAll();
     _pageController.dispose();
     super.dispose();
   }
 
+  void _refreshVideoState() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _syncVideoWindow(List<Drop> drops) {
+    _videoWindow.sync(
+      drops: drops,
+      currentIndex: _focusedIndex,
+      shouldPlayCurrent: widget.isActive,
+    );
+  }
+
   void _selectSport(String? sportId) {
+    _videoWindow.sync(
+      drops: const [],
+      currentIndex: 0,
+      shouldPlayCurrent: false,
+    );
     setState(() {
       _focusedIndex = 0;
     });
@@ -53,7 +86,13 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
     super.build(context);
     return Stack(
       children: [
-        BlocBuilder<DropFeedCubit, DropFeedState>(
+        BlocConsumer<DropFeedCubit, DropFeedState>(
+          listenWhen: (previous, current) =>
+              previous.drops != current.drops ||
+              previous.isLoadingMore != current.isLoadingMore,
+          listener: (context, state) {
+            _syncVideoWindow(state.drops);
+          },
           builder: (context, state) {
             if (state.isLoading && state.drops.isEmpty) {
               return const Center(child: CircularProgressIndicator());
@@ -82,9 +121,11 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
               scrollDirection: Axis.vertical,
               itemCount: state.drops.length + (state.isLoadingMore ? 1 : 0),
               onPageChanged: (index) {
+                _videoWindow.pauseIndex(_focusedIndex);
                 setState(() {
                   _focusedIndex = index;
                 });
+                _syncVideoWindow(state.drops);
                 if (index >= state.drops.length - 3) {
                   context.read<DropFeedCubit>().loadMore();
                 }
@@ -97,19 +138,68 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
                 return DropVideoPlayerItem(
                   drop: drop,
                   isFocused: widget.isActive && index == _focusedIndex,
+                  controller: _videoWindow.controllerFor(index),
+                  isInitializing: _videoWindow.isInitializing(index),
+                  videoError: _videoWindow.errorFor(index),
+                  showBackButton: false,
+                  onRetryVideo: () => _videoWindow.retry(
+                    index: index,
+                    drops: state.drops,
+                    currentIndex: _focusedIndex,
+                    shouldPlayCurrent: widget.isActive,
+                  ),
                   onDropUpdated: (_) {},
                   onToggleProps: (dropId) =>
                       context.read<DropFeedCubit>().toggleProps(dropId),
                   onCommentsCountUpdated: (dropId, count) => context
                       .read<DropFeedCubit>()
                       .updateCommentCount(dropId, count),
+                  onPauseForOverlay: _videoWindow.suppressPlayback,
+                  onResumeAfterOverlay: _videoWindow.resumePlayback,
                 );
               },
             );
           },
         ),
         Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: MediaQuery.of(context).padding.top + 104,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.55),
+                    Colors.black.withValues(alpha: 0.18),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
           top: MediaQuery.of(context).padding.top + 8,
+          left: 16,
+          right: 16,
+          child: const IgnorePointer(
+            child: Text(
+              'Drops',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 48,
           left: 12,
           right: 12,
           child: _SportFilter(
