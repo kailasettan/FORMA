@@ -22,6 +22,7 @@ import 'package:forma/domain/entities/aggregated_stats.dart';
 import 'package:forma/presentation/cubits/auth_cubit.dart';
 import 'package:forma/presentation/cubits/catalog_cubit.dart';
 import 'package:forma/presentation/cubits/profile_cubit.dart';
+import 'package:forma/presentation/cubits/theme_cubit.dart';
 import 'package:forma/presentation/screens/auth/signup_screen.dart';
 import 'package:forma/presentation/screens/auth/login_screen.dart';
 import 'package:forma/presentation/screens/auth/otp_screen.dart';
@@ -30,7 +31,47 @@ import 'package:forma/presentation/screens/auth/reset_password_screen.dart';
 import 'package:forma/presentation/screens/dashboard_screen.dart';
 import 'package:forma/presentation/screens/profile/edit_profile_screen.dart';
 import 'package:forma/presentation/screens/profile/profile_form_screen.dart';
+import 'package:forma/presentation/screens/settings/settings_screen.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:io';
+
+class FakeSecureStorage implements FlutterSecureStorage {
+  final Map<String, String> _data = {};
+
+  @override
+  Future<String?> read({
+    required String key,
+    AndroidOptions? aOptions,
+    AppleOptions? iOptions,
+    LinuxOptions? lOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+    WebOptions? webOptions,
+  }) async {
+    return _data[key];
+  }
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AndroidOptions? aOptions,
+    AppleOptions? iOptions,
+    LinuxOptions? lOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+    WebOptions? webOptions,
+  }) async {
+    if (value != null) {
+      _data[key] = value;
+    } else {
+      _data.remove(key);
+    }
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 class FakeAuthRepository implements AuthRepository {
   String? lastSignupRole;
@@ -1201,5 +1242,58 @@ void main() {
 
     // Verify identifier is trimmed and converted to lowercase
     expect(authRepo.lastLoginIdentifier, 'myusername');
+  });
+
+  testWidgets('SettingsScreen appearance switching and persistence', (
+    WidgetTester tester,
+  ) async {
+    final storage = FakeSecureStorage();
+    final themeCubit = ThemeCubit(secureStorage: storage);
+
+    // Initial state should be system
+    expect(themeCubit.state, ThemeMode.system);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider<ThemeCubit>.value(
+          value: themeCubit,
+          child: const SettingsScreen(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Verify settings shows "Appearance"
+    expect(find.text('Appearance'), findsWidgets);
+    expect(find.text('System default'), findsOneWidget);
+
+    // Open bottom sheet
+    await tester.tap(find.text('Appearance').last);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    // Verify all three options exist in the sheet
+    expect(find.text('System default'), findsWidgets);
+    expect(find.text('Light'), findsOneWidget);
+    expect(find.text('Dark'), findsOneWidget);
+
+    // Select Light theme
+    await tester.tap(find.text('Light'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    // Verify ThemeCubit updated to Light
+    expect(themeCubit.state, ThemeMode.light);
+
+    // Verify persistent storage saved it
+    expect(storage._data[ThemeCubit.themeKey], 'light');
+
+    // Verify new ThemeCubit picks up the persisted choice
+    final newCubit = ThemeCubit(secureStorage: storage);
+    await tester.idle();
+    expect(newCubit.state, ThemeMode.light);
+
+    await themeCubit.close();
+    await newCubit.close();
   });
 }

@@ -26,6 +26,7 @@ import 'presentation/cubits/comments_cubit.dart';
 import 'presentation/cubits/public_profile_cubit.dart';
 import 'presentation/cubits/user_search_cubit.dart';
 import 'presentation/cubits/scout_shortlist_cubit.dart';
+import 'presentation/cubits/theme_cubit.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/dashboard_screen.dart';
 import 'presentation/screens/splash_screen.dart';
@@ -165,13 +166,22 @@ class FormaApp extends StatelessWidget {
           BlocProvider<ScoutShortlistCubit>(
             create: (context) => ScoutShortlistCubit(scoutRepository),
           ),
+          BlocProvider<ThemeCubit>(
+            create: (context) => ThemeCubit(),
+          ),
         ],
-        child: MaterialApp(
-          title: 'FORMA',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.darkTheme,
-          onGenerateRoute: AppRouter.generateRoute,
-          home: const AuthGate(),
+        child: BlocBuilder<ThemeCubit, ThemeMode>(
+          builder: (context, themeMode) {
+            return MaterialApp(
+              title: 'FORMA',
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: themeMode,
+              onGenerateRoute: AppRouter.generateRoute,
+              home: const AuthGate(),
+            );
+          },
         ),
       ),
     );
