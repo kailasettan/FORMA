@@ -159,6 +159,37 @@ def test_debug_version_exposes_safe_deployment_state():
     assert "RESEND_API_KEY" not in data
 
 
+def test_cors_allows_local_flutter_web_preflight():
+    response = client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:54321",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:54321"
+    assert "GET" in response.headers["access-control-allow-methods"]
+    assert "Authorization" in response.headers["access-control-allow-headers"]
+    assert "Content-Type" in response.headers["access-control-allow-headers"]
+
+
+def test_cors_allows_nadha_labs_origin():
+    response = client.get("/health", headers={"Origin": "https://nadhalabs.com"})
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://nadhalabs.com"
+
+
+def test_cors_rejects_unlisted_origin():
+    response = client.get("/health", headers={"Origin": "https://example.com"})
+
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers
+
+
 def test_signup_missing_role_creates_athlete_user():
     response = client.post(
         "/auth/signup",
@@ -1681,4 +1712,3 @@ def test_auth_hardening_and_rate_limiting():
     attempt_cleared = db.scalar(select(LoginAttempt).where(LoginAttempt.identifier == "hardened_user"))
     assert attempt_cleared is None
     db.close()
-

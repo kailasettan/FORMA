@@ -5,12 +5,28 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.config import settings
 from app.routers import auth, profiles, stats, users, catalog, drops, scout, uploads
 from app.schemas import USERNAME_ERROR
 
 logger = logging.getLogger(__name__)
+
+CORS_ALLOWED_ORIGINS = [
+    "https://nadhalabs.com",
+    "https://www.nadhalabs.com",
+]
+CORS_ALLOWED_ORIGIN_REGEX = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
+CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+CORS_ALLOWED_HEADERS = [
+    "Accept",
+    "Authorization",
+    "Content-Type",
+    "Origin",
+    "X-Requested-With",
+]
 
 
 def _current_commit() -> str:
@@ -43,6 +59,20 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Forma API", lifespan=lifespan)
+
+extra_cors_origins = [
+    origin.strip()
+    for origin in settings.cors_allowed_origins.split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[*CORS_ALLOWED_ORIGINS, *extra_cors_origins],
+    allow_origin_regex=CORS_ALLOWED_ORIGIN_REGEX,
+    allow_methods=CORS_ALLOWED_METHODS,
+    allow_headers=CORS_ALLOWED_HEADERS,
+    allow_credentials=False,
+)
 
 
 @app.exception_handler(RequestValidationError)
