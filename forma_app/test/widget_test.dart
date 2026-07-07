@@ -48,8 +48,13 @@ class FakeAuthRepository implements AuthRepository {
   String? lastNewPassword;
   String? lastConfirmPassword;
 
+  String? lastLoginIdentifier;
+  String? lastLoginPassword;
+
   @override
-  Future<User> login({required String email, required String password}) async {
+  Future<User> login({required String identifier, required String password}) async {
+    lastLoginIdentifier = identifier;
+    lastLoginPassword = password;
     throw UnimplementedError();
   }
 
@@ -127,6 +132,10 @@ class FakeAuthRepository implements AuthRepository {
 class FakeProfileRepository implements ProfileRepository {
   String? lastFocusedSportId;
   String? lastProfilePhotoUrl;
+  String? lastUsername;
+  String? lastFullName;
+  String? lastBio;
+  String? lastLocation;
 
   @override
   Future<List<PlayerProfile>> fetchPlayerProfiles(String userId) async => [];
@@ -190,6 +199,10 @@ class FakeProfileRepository implements ProfileRepository {
     List<String>? preferredOpportunityTypes,
     String? focusedSportId,
   }) async {
+    lastUsername = username;
+    lastFullName = fullName;
+    lastBio = bio;
+    lastLocation = location;
     lastFocusedSportId = focusedSportId;
     lastProfilePhotoUrl = profilePhotoUrl;
     return User(
@@ -345,14 +358,6 @@ class FakeScoutRepository implements ScoutRepository {
 }
 
 void main() {
-  final football = Sport(
-    id: 'sport-1',
-    name: 'Football',
-    slug: 'football',
-    isActive: true,
-    createdAt: DateTime(2026),
-  );
-
   testWidgets('renders FORMA login shell on startup when unauthenticated', (
     WidgetTester tester,
   ) async {
@@ -447,7 +452,107 @@ void main() {
     expect(find.text('OTP Screen'), findsOneWidget);
   });
 
-  testWidgets('edit profile opens with stale focused sport id', (
+  testWidgets('signup lowercases and removes username spaces', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        routes: {
+          '/otp-verification': (_) => const Scaffold(body: Text('OTP Screen')),
+        },
+        home: BlocProvider(
+          create: (_) => AuthCubit(authRepo),
+          child: const SignupScreen(),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Full Name'),
+      'Beta User',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Username'),
+      'Kai Las 07',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email Address'),
+      'beta@example.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Password'),
+      'password123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Confirm Password'),
+      'password123',
+    );
+
+    expect(
+      tester
+          .widget<TextFormField>(find.widgetWithText(TextFormField, 'Username'))
+          .controller!
+          .text,
+      'kailas07',
+    );
+
+    await tester.tap(find.text('CREATE ACCOUNT'));
+    await tester.pumpAndSettle();
+
+    expect(authRepo.lastSignupUsername, 'kailas07');
+    expect(find.text('OTP Screen'), findsOneWidget);
+  });
+
+  testWidgets('signup rejects invalid username before submit', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider(
+          create: (_) => AuthCubit(authRepo),
+          child: const SignupScreen(),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Full Name'),
+      'Beta User',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Username'),
+      '.kailas',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email Address'),
+      'beta@example.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Password'),
+      'password123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Confirm Password'),
+      'password123',
+    );
+
+    await tester.tap(find.text('CREATE ACCOUNT'));
+    await tester.pumpAndSettle();
+
+    expect(authRepo.lastSignupUsername, isNull);
+    expect(
+      find.text(
+        'Username can only use lowercase letters, numbers, dots, and underscores.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('edit profile renders simplified social-only fields and updates', (
     WidgetTester tester,
   ) async {
     final profileRepo = FakeProfileRepository();
@@ -459,15 +564,21 @@ void main() {
       role: 'athlete',
       focusedSportId: 'missing-sport-id',
       createdAt: DateTime(2026),
+      headline: 'Old Headline',
+      availability: 'Open to trials',
+      bio: 'Old Bio',
+      location: 'Old Location',
     );
 
     await tester.pumpWidget(
       MaterialApp(
         home: RepositoryProvider<ProfileRepository>.value(
           value: profileRepo,
-          child: BlocProvider(
-            create: (_) =>
-                CatalogCubit(FakeCatalogRepository(sports: [football])),
+          child: MultiBlocProvider(
+            providers: [
+              BlocProvider(create: (_) => AuthCubit(FakeAuthRepository())),
+              BlocProvider(create: (_) => CatalogCubit(FakeCatalogRepository())),
+            ],
             child: EditProfileScreen(user: user),
           ),
         ),
@@ -475,51 +586,39 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
     expect(find.text('Edit Profile'), findsOneWidget);
-    expect(find.text('Focused Sport'), findsOneWidget);
-    expect(find.text('Profile Photo URL'), findsNothing);
+
+    // Check social fields are present
+    expect(find.text('Name'), findsOneWidget);
+    expect(find.text('Username'), findsOneWidget);
+    expect(find.text('Bio'), findsOneWidget);
+    expect(find.text('Location'), findsOneWidget);
     expect(find.text('Change photo'), findsOneWidget);
-  });
 
-  testWidgets('edit profile dedupes duplicate focused sport item values', (
-    WidgetTester tester,
-  ) async {
-    final duplicateFootball = Sport(
-      id: football.id,
-      name: 'Football Duplicate',
-      slug: 'football-duplicate',
-      isActive: true,
-      createdAt: DateTime(2026),
-    );
-    final user = User(
-      id: 'user-1',
-      username: 'athlete',
-      email: 'athlete@example.com',
-      fullName: 'Athlete One',
-      role: 'athlete',
-      focusedSportId: football.id,
-      createdAt: DateTime(2026),
-    );
+    // Check sports fields are NOT present
+    expect(find.text('Focused Sport'), findsNothing);
+    expect(find.text('Availability Status'), findsNothing);
+    expect(find.text('Preferred Opportunities (comma separated)'), findsNothing);
+    expect(find.text('Headline (e.g. Badminton Singles Player)'), findsNothing);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: RepositoryProvider<ProfileRepository>.value(
-          value: FakeProfileRepository(),
-          child: BlocProvider(
-            create: (_) => CatalogCubit(
-              FakeCatalogRepository(sports: [football, duplicateFootball]),
-            ),
-            child: EditProfileScreen(user: user),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+    // Verify fields contain existing user values
+    expect(find.widgetWithText(TextFormField, 'Athlete One'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'athlete'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Old Bio'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Old Location'), findsOneWidget);
 
-    expect(tester.takeException(), isNull);
-    expect(find.text('Edit Profile'), findsOneWidget);
-    expect(find.text('FOOTBALL'), findsOneWidget);
+    // Make edits and save
+    await tester.enterText(find.widgetWithText(TextFormField, 'Athlete One'), 'New Name');
+    await tester.enterText(find.widgetWithText(TextFormField, 'athlete'), 'newusername');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Old Bio'), 'New Bio');
+    await tester.ensureVisible(find.text('SAVE PROFILE'));
+    await tester.tap(find.text('SAVE PROFILE'));
+    await tester.pump();
+
+    // Verify updateMe was called on repository
+    expect(profileRepo.lastFullName, 'New Name');
+    expect(profileRepo.lastUsername, 'newusername');
+    expect(profileRepo.lastBio, 'New Bio');
   });
 
   testWidgets('specialization form opens with empty catalog and stale skill', (
@@ -777,7 +876,7 @@ void main() {
     );
 
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Email Address'),
+      find.widgetWithText(TextFormField, 'Email or username'),
       'test@example.com',
     );
     await tester.enterText(
@@ -1064,5 +1163,43 @@ void main() {
 
     expect(find.byType(DashboardScreen), findsOneWidget);
     expect(find.byType(OtpScreen), findsNothing);
+  });
+
+  testWidgets('LoginScreen allows and validates email and username formats', (WidgetTester tester) async {
+    final authRepo = FakeAuthRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider(
+          create: (_) => AuthCubit(authRepo),
+          child: const LoginScreen(),
+        ),
+      ),
+    );
+
+    // Enter empty value
+    await tester.tap(find.text('LOG IN'));
+    await tester.pump();
+    expect(find.text('Please enter your email or username'), findsOneWidget);
+
+    // Enter invalid email address
+    await tester.enterText(find.widgetWithText(TextFormField, 'Email or username'), 'invalid_email@');
+    await tester.tap(find.text('LOG IN'));
+    await tester.pump();
+    expect(find.text('Please enter a valid email address'), findsOneWidget);
+
+    // Enter invalid short username
+    await tester.enterText(find.widgetWithText(TextFormField, 'Email or username'), 'ab');
+    await tester.tap(find.text('LOG IN'));
+    await tester.pump();
+    expect(find.text('Username must be at least 3 characters'), findsOneWidget);
+
+    // Enter valid username
+    await tester.enterText(find.widgetWithText(TextFormField, 'Email or username'), '  MyUsername  ');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Password'), 'password123');
+    await tester.tap(find.text('LOG IN'));
+    await tester.pump();
+
+    // Verify identifier is trimmed and converted to lowercase
+    expect(authRepo.lastLoginIdentifier, 'myusername');
   });
 }

@@ -70,19 +70,23 @@ class _LoginScreenState extends State<LoginScreen> {
           } else if (state is AuthError) {
             String displayMessage = state.message;
             if (displayMessage.toLowerCase().contains('email not verified')) {
+              final parts = displayMessage.split(':');
+              final email = parts.length > 1 ? parts[1].trim() : _emailController.text.trim().toLowerCase();
               Navigator.pushNamed(
                 context,
                 AppRouter.otpVerification,
-                arguments: _emailController.text.trim().toLowerCase(),
+                arguments: email,
               );
               return;
             }
-            if (displayMessage.toLowerCase().contains(
-                  'invalid email or password',
-                ) ||
+            if (displayMessage.toLowerCase().contains('invalid email/username or password') ||
+                displayMessage.toLowerCase().contains('invalid email or password') ||
                 displayMessage.toLowerCase().contains('invalid credentials') ||
                 displayMessage.toLowerCase().contains('401')) {
-              displayMessage = 'Invalid email or password.';
+              displayMessage = 'Invalid email/username or password.';
+            } else if (displayMessage.toLowerCase().contains('too many login attempts') ||
+                       displayMessage.toLowerCase().contains('429')) {
+              displayMessage = 'Too many login attempts. Please try again later.';
             }
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -132,17 +136,22 @@ class _LoginScreenState extends State<LoginScreen> {
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
-                        labelText: 'Email Address',
-                        prefixIcon: Icon(Icons.email_outlined),
+                        labelText: 'Email or username',
+                        prefixIcon: Icon(Icons.person_outline),
                       ),
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please enter your email';
+                        final val = value?.trim() ?? '';
+                        if (val.isEmpty) {
+                          return 'Please enter your email or username';
                         }
-                        if (!RegExp(
-                          r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                        ).hasMatch(value.trim())) {
-                          return 'Please enter a valid email address';
+                        if (val.contains('@')) {
+                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val)) {
+                            return 'Please enter a valid email address';
+                          }
+                        } else {
+                          if (val.length < 3) {
+                            return 'Username must be at least 3 characters';
+                          }
                         }
                         return null;
                       },

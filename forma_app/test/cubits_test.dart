@@ -23,7 +23,7 @@ class FakeAuthRepository implements AuthRepository {
   String? savedToken;
 
   @override
-  Future<User> login({required String email, required String password}) async {
+  Future<User> login({required String identifier, required String password}) async {
     if (shouldThrow) throw Exception('Invalid credentials');
     return mockUser!;
   }

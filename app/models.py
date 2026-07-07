@@ -298,3 +298,15 @@ class EmailOTP(Base):
     last_sent_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
     user: Mapped[User] = relationship()
+
+
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    identifier: Mapped[str] = mapped_column(CITEXT(), unique=True, index=True, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_attempt_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+

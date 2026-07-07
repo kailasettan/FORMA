@@ -5,13 +5,13 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import User, EmailOTP
+from app.models import User, EmailOTP, LoginAttempt
 from app.schemas import AuthOut, ForgotPasswordIn, LoginIn, ResetPasswordIn, SignUpIn, VerifyOTPIn, ResendOTPIn
 from app.security import create_access_token, hash_password, verify_password
 
@@ -22,6 +22,10 @@ PASSWORD_RESET_PURPOSE = "password_reset"
 RESET_CODE_SENT_MESSAGE = "If an account exists, a reset code has been sent."
 
 
+def normalize_email_for_log(email: str) -> str:
+    return email.strip().lower()
+
+
 def resend_key_hint() -> str:
     api_key = settings.resend_api_key or ""
     if not api_key:
@@ -30,7 +34,7 @@ def resend_key_hint() -> str:
 
 
 def log_resend_config_state() -> None:
-    logger.info(
+    logger.warning(
         "Resend config loaded: key_present=%s key_prefix=%s from_email=%s from_name=%s app_env=%s",
         bool(settings.resend_api_key),
         resend_key_hint(),
@@ -64,7 +68,9 @@ def send_otp_email(
     url = "https://api.resend.com/emails"
     headers = {
         "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json",
         "Content-Type": "application/json",
+        "User-Agent": "FORMA/1.0 (https://forma-app.up.railway.app)",
     }
     payload = {
         "from": f"{from_name} <{from_email}>",
@@ -74,13 +80,19 @@ def send_otp_email(
         "text": f"Your FORMA verification code is {otp}. It will expire in 10 minutes.",
     }
 
-    logger.info("OTP email send requested for %s", email)
-    logger.info(
+    logger.warning("Resend send helper called")
+    logger.warning("OTP email send requested for %s", email)
+    logger.warning(
         "OTP email metadata purpose=%s from_email=%s resend_key_present=%s resend_key_prefix=%s",
         purpose,
         from_email,
         bool(api_key),
         resend_key_hint(),
+    )
+    logger.warning(
+        "Resend request prepared url=%s method=POST payload_fields=%s",
+        url,
+        ",".join(payload.keys()),
     )
 
     req = urllib.request.Request(
@@ -100,7 +112,7 @@ def send_otp_email(
             )
 
         with urllib.request.urlopen(req, timeout=5) as response:
-            logger.info("Resend HTTP status code: %s", response.status)
+            logger.warning("Resend HTTP status code: %s", response.status)
             if response.status not in (200, 201):
                 response_body = response.read().decode("utf-8", errors="replace")
                 logger.error(
@@ -182,6 +194,7 @@ def generate_and_save_otp(db: Session, user: User, purpose: str = EMAIL_VERIFICA
 
 @router.post("/signup", response_model=AuthOut, status_code=status.HTTP_201_CREATED)
 def signup(payload: SignUpIn, db: Session = Depends(get_db)) -> AuthOut:
+    logger.warning("Auth endpoint reached: signup email=%s", normalize_email_for_log(str(payload.email)))
     requested_role = payload.role.lower().strip()
     if requested_role == "scout":
         raise HTTPException(
@@ -195,7 +208,10 @@ def signup(payload: SignUpIn, db: Session = Depends(get_db)) -> AuthOut:
         )
 
     existing = db.scalar(
-        select(User).where((User.username == payload.username) | (User.email == payload.email))
+        select(User).where(
+            (func.lower(User.username) == payload.username)
+            | (User.email == payload.email)
+        )
     )
     if existing is not None:
         if existing.username.lower() == payload.username.lower():
@@ -225,19 +241,67 @@ def signup(payload: SignUpIn, db: Session = Depends(get_db)) -> AuthOut:
 
     # Generate and send OTP
     otp = generate_and_save_otp(db, user, EMAIL_VERIFICATION_PURPOSE)
-    send_otp_email(user.email, otp, purpose=EMAIL_VERIFICATION_PURPOSE)
+    try:
+        send_otp_email(user.email, otp, purpose=EMAIL_VERIFICATION_PURPOSE)
+    except HTTPException:
+        logger.exception(
+            "Signup OTP email send failed after OTP row creation for %s",
+            normalize_email_for_log(user.email),
+        )
 
     return AuthOut(access_token=create_access_token(user.id), user=user)
 
 
 @router.post("/login", response_model=AuthOut)
 def login(payload: LoginIn, db: Session = Depends(get_db)) -> AuthOut:
-    user = db.scalar(select(User).where(User.email == payload.email))
+    identifier = payload.identifier.strip().lower()
+    now = datetime.utcnow()
+
+    # Track failed attempts by normalized identifier
+    attempt_entry = db.scalar(
+        select(LoginAttempt).where(LoginAttempt.identifier == identifier)
+    )
+
+    if attempt_entry:
+        if attempt_entry.attempts >= 5 and (now - attempt_entry.last_attempt_at).total_seconds() < 15 * 60:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many login attempts. Please try again later.",
+            )
+
+    # Lookup user by email OR username
+    if "@" in identifier:
+        user = db.scalar(select(User).where(User.email == identifier))
+    else:
+        user = db.scalar(select(User).where(User.username == identifier))
+
     if user is None or not verify_password(payload.password, user.password_hash):
+        # Record failed attempt
+        if attempt_entry:
+            # If the last attempt was more than 15 minutes ago, reset the count to 1
+            if (now - attempt_entry.last_attempt_at).total_seconds() >= 15 * 60:
+                attempt_entry.attempts = 1
+            else:
+                attempt_entry.attempts += 1
+            attempt_entry.last_attempt_at = now
+        else:
+            new_attempt = LoginAttempt(
+                identifier=identifier,
+                attempts=1,
+                last_attempt_at=now
+            )
+            db.add(new_attempt)
+        db.commit()
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password.",
+            detail="Invalid email/username or password.",
         )
+
+    # Successful login: clear/reset failed attempts for that identifier
+    if attempt_entry:
+        db.delete(attempt_entry)
+        db.commit()
 
     if not user.email_verified:
         existing = db.scalar(
@@ -246,7 +310,6 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> AuthOut:
                 EmailOTP.purpose == EMAIL_VERIFICATION_PURPOSE,
             )
         )
-        now = datetime.utcnow()
         should_send = True
         if existing:
             last_sent = existing.last_sent_at
@@ -262,7 +325,7 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> AuthOut:
 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email not verified.",
+            detail=f"Email not verified: {user.email}",
         )
 
     return AuthOut(access_token=create_access_token(user.id), user=user)
@@ -327,6 +390,7 @@ def verify_otp(payload: VerifyOTPIn, db: Session = Depends(get_db)):
 
 @router.post("/resend-otp")
 def resend_otp(payload: ResendOTPIn, db: Session = Depends(get_db)):
+    logger.warning("Auth endpoint reached: resend-otp email=%s", normalize_email_for_log(str(payload.email)))
     user = db.scalar(select(User).where(User.email == payload.email))
     if user is None:
         raise HTTPException(
@@ -364,6 +428,7 @@ def resend_otp(payload: ResendOTPIn, db: Session = Depends(get_db)):
 
 @router.post("/forgot-password")
 def forgot_password(payload: ForgotPasswordIn, db: Session = Depends(get_db)):
+    logger.warning("Auth endpoint reached: forgot-password email=%s", normalize_email_for_log(str(payload.email)))
     user = db.scalar(select(User).where(User.email == payload.email))
     if user is not None:
         otp = generate_and_save_otp(db, user, PASSWORD_RESET_PURPOSE)
@@ -382,6 +447,10 @@ def forgot_password(payload: ForgotPasswordIn, db: Session = Depends(get_db)):
 
 @router.post("/resend-password-reset-otp")
 def resend_password_reset_otp(payload: ForgotPasswordIn, db: Session = Depends(get_db)):
+    logger.warning(
+        "Auth endpoint reached: resend-password-reset-otp email=%s",
+        normalize_email_for_log(str(payload.email)),
+    )
     user = db.scalar(select(User).where(User.email == payload.email))
     if user is None:
         return {"message": RESET_CODE_SENT_MESSAGE}

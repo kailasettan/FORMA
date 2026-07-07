@@ -12,6 +12,12 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
+  static const _usernameError =
+      'Username can only use lowercase letters, numbers, dots, and underscores.';
+  static final _usernamePattern = RegExp(
+    r'^(?![._])(?!.*\.\.)[a-z0-9._]{3,30}(?<![._])$',
+  );
+
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -22,7 +28,25 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _obscureConfirmPassword = true;
 
   @override
+  void initState() {
+    super.initState();
+    _usernameController.addListener(_normalizeUsernameInput);
+  }
+
+  void _normalizeUsernameInput() {
+    final current = _usernameController.text;
+    final normalized = current.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+    if (current == normalized) return;
+
+    _usernameController.value = TextEditingValue(
+      text: normalized,
+      selection: TextSelection.collapsed(offset: normalized.length),
+    );
+  }
+
+  @override
   void dispose() {
+    _usernameController.removeListener(_normalizeUsernameInput);
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -37,8 +61,9 @@ class _SignupScreenState extends State<SignupScreen> {
       if (_passwordController.text != _confirmPasswordController.text) {
         return;
       }
+      final username = _usernameController.text.trim().toLowerCase();
       context.read<AuthCubit>().signUp(
-        username: _usernameController.text.trim(),
+        username: username,
         email: _emailController.text.trim().toLowerCase(),
         password: _passwordController.text,
         fullName: _fullNameController.text.trim(),
@@ -70,11 +95,23 @@ class _SignupScreenState extends State<SignupScreen> {
             }
           } else if (state is AuthError) {
             String displayMessage = state.message;
-            if (displayMessage.toLowerCase().contains('username is already taken') ||
-                displayMessage.toLowerCase().contains('username or email is already taken')) {
+            if (displayMessage.toLowerCase().contains(
+                  'username is already taken',
+                ) ||
+                displayMessage.toLowerCase().contains(
+                  'username or email is already taken',
+                )) {
               displayMessage = 'Username is already taken.';
-            } else if (displayMessage.toLowerCase().contains('email is already taken') ||
-                       displayMessage.toLowerCase().contains('email is already registered')) {
+            } else if (displayMessage.toLowerCase().contains(
+              'username can only use',
+            )) {
+              displayMessage = _usernameError;
+            } else if (displayMessage.toLowerCase().contains(
+                  'email is already taken',
+                ) ||
+                displayMessage.toLowerCase().contains(
+                  'email is already registered',
+                )) {
               displayMessage = 'Email is already registered.';
             }
             ScaffoldMessenger.of(context).showSnackBar(
@@ -135,17 +172,17 @@ class _SignupScreenState extends State<SignupScreen> {
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Username',
+                        helperText:
+                            'Use 3-30 lowercase letters, numbers, dots, or underscores.',
                         prefixIcon: Icon(Icons.alternate_email_outlined),
                       ),
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
+                        final username = value?.trim().toLowerCase() ?? '';
+                        if (username.isEmpty) {
                           return 'Please enter a username';
                         }
-                        if (value.trim().length < 3) {
-                          return 'Username must be at least 3 characters';
-                        }
-                        if (value.trim().length > 50) {
-                          return 'Username must be under 50 characters';
+                        if (!_usernamePattern.hasMatch(username)) {
+                          return _usernameError;
                         }
                         return null;
                       },
@@ -221,7 +258,8 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                           onPressed: () {
                             setState(() {
-                              _obscureConfirmPassword = !_obscureConfirmPassword;
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword;
                             });
                           },
                         ),

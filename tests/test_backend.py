@@ -1,5 +1,6 @@
 import uuid
 import pytest
+from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
@@ -139,9 +140,23 @@ def create_test_user(username: str, role: str = "athlete") -> tuple[User, str]:
     db.close()
     
     # Login to get token
-    response = client.post("/auth/login", json={"email": f"{username}@example.com", "password": "password123"})
+    response = client.post("/auth/login", json={"identifier": f"{username}@example.com", "password": "password123"})
     token = response.json()["access_token"]
     return user, token
+
+
+def test_debug_version_exposes_safe_deployment_state():
+    response = client.get("/debug/version")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert "environment" in data
+    assert "commit" in data
+    assert "resend_key_present" in data
+    assert "from_email_configured" in data
+    assert "from_name_configured" in data
+    assert "RESEND_API_KEY" not in data
 
 
 def test_signup_missing_role_creates_athlete_user():
@@ -166,6 +181,77 @@ def test_signup_missing_role_creates_athlete_user():
         assert user.role == "athlete"
     finally:
         db.close()
+
+
+@pytest.mark.parametrize("username", ["kailas", "kailas07", "kailas_07", "kailas.07"])
+def test_signup_accepts_valid_usernames(username):
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": username,
+            "email": f"{username.replace('.', '_')}@example.com",
+            "password": "password123",
+            "full_name": "Valid User",
+            "role": "athlete",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["user"]["username"] == username
+
+
+def test_signup_normalizes_uppercase_username_before_saving():
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": "  Kailas07  ",
+            "email": "normalized_username@example.com",
+            "password": "password123",
+            "full_name": "Normalized User",
+            "role": "athlete",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["user"]["username"] == "kailas07"
+
+    db = TestingSessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.username == "kailas07"))
+        assert user is not None
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize(
+    "username",
+    [
+        "kailas 07",
+        "kailas-07",
+        "kailas@07",
+        ".kailas",
+        "kailas.",
+        "_kailas",
+        "kailas_",
+        "ka",
+        "kailas..07",
+        "a" * 31,
+    ],
+)
+def test_signup_rejects_invalid_usernames(username):
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": username,
+            "email": "invalid_username@example.com",
+            "password": "password123",
+            "full_name": "Invalid User",
+            "role": "athlete",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Username can only use lowercase letters, numbers, dots, and underscores."
 
 
 def test_signup_rejects_public_scout_role():
@@ -272,6 +358,33 @@ def test_signup_duplicate_username_rejected():
     assert response.json()["detail"] == "Username is already taken."
 
 
+def test_signup_duplicate_username_rejected_case_insensitively():
+    client.post(
+        "/auth/signup",
+        json={
+            "username": "case_user",
+            "email": "case1@example.com",
+            "password": "password123",
+            "full_name": "Case One",
+            "role": "athlete",
+        },
+    )
+
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": "Case_User",
+            "email": "case2@example.com",
+            "password": "password123",
+            "full_name": "Case Two",
+            "role": "athlete",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Username is already taken."
+
+
 def test_expired_token_returns_unauthorized():
     from jose import jwt
     from datetime import datetime, timedelta, timezone
@@ -329,6 +442,44 @@ def test_signup_creates_unverified_user_and_sends_email():
             assert otp_entry.attempts == 0
         finally:
             db.close()
+
+
+def test_signup_creates_otp_even_if_email_send_fails(mock_send_email):
+    mock_send_email.side_effect = HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Failed to send verification email. Please try again later.",
+    )
+    username = "send_failure_user"
+    email = "send_failure@example.com"
+
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": username,
+            "email": email,
+            "password": "password123",
+            "full_name": "Send Failure User",
+            "role": "athlete",
+        },
+    )
+
+    assert response.status_code == 201
+    mock_send_email.assert_called_once()
+    assert mock_send_email.call_args.kwargs["purpose"] == "email_verification"
+
+    db = TestingSessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.username == username))
+        assert user is not None
+        otp_entry = db.scalar(
+            select(EmailOTP).where(
+                EmailOTP.user_id == user.id,
+                EmailOTP.purpose == "email_verification",
+            )
+        )
+        assert otp_entry is not None
+    finally:
+        db.close()
 
 
 def test_correct_otp_verifies_user():
@@ -553,12 +704,12 @@ def test_unverified_user_cannot_login_verified_user_can():
         response = client.post(
             "/auth/login",
             json={
-                "email": email,
+                "identifier": email,
                 "password": password
             }
         )
         assert response.status_code == 403
-        assert response.json()["detail"] == "Email not verified."
+        assert response.json()["detail"].startswith("Email not verified")
 
         client.post(
             "/auth/verify-otp",
@@ -571,7 +722,7 @@ def test_unverified_user_cannot_login_verified_user_can():
         response = client.post(
             "/auth/login",
             json={
-                "email": email,
+                "identifier": email,
                 "password": password
             }
         )
@@ -786,13 +937,13 @@ def test_correct_reset_otp_resets_password_and_invalidates_old_password(mock_sen
 
     old_login = client.post(
         "/auth/login",
-        json={"email": user.email, "password": "password123"},
+        json={"identifier": user.email, "password": "password123"},
     )
     assert old_login.status_code == 401
 
     new_login = client.post(
         "/auth/login",
-        json={"email": user.email, "password": "newpass123"},
+        json={"identifier": user.email, "password": "newpass123"},
     )
     assert new_login.status_code == 200
 
@@ -1432,3 +1583,102 @@ def test_username_search_case_insensitivity_and_ranking():
     assert response_exact.status_code == 200
     results_exact = response_exact.json()
     assert results_exact[0]["username"] == "athlete_b"
+
+
+def test_auth_hardening_and_rate_limiting():
+    from datetime import timedelta
+    from app.models import LoginAttempt
+    # 1. Setup verified user
+    db = TestingSessionLocal()
+    user = User(
+        username="hardened_user",
+        email="hardened@example.com",
+        password_hash=hash_password("password123"),
+        full_name="Hardened User",
+        role="athlete",
+        email_verified=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    db.close()
+
+    # Login with email address works
+    resp1 = client.post("/auth/login", json={"identifier": "hardened@example.com", "password": "password123"})
+    assert resp1.status_code == 200
+    assert resp1.json()["user"]["username"] == "hardened_user"
+
+    # Login with username works
+    resp2 = client.post("/auth/login", json={"identifier": "hardened_user", "password": "password123"})
+    assert resp2.status_code == 200
+
+    # Login with uppercase username input works
+    resp3 = client.post("/auth/login", json={"identifier": "HARDENED_USER", "password": "password123"})
+    assert resp3.status_code == 200
+
+    # Wrong password with username fails with generic error
+    resp4 = client.post("/auth/login", json={"identifier": "hardened_user", "password": "wrong_password"})
+    assert resp4.status_code == 401
+    assert "invalid email/username or password" in resp4.json()["detail"].lower()
+
+    # Unknown username fails with generic error
+    resp5 = client.post("/auth/login", json={"identifier": "unknown_user_name", "password": "password123"})
+    assert resp5.status_code == 401
+    assert "invalid email/username or password" in resp5.json()["detail"].lower()
+
+    # Unverified user using username is blocked
+    db = TestingSessionLocal()
+    unverified_user = User(
+        username="unverified_user",
+        email="unverified@example.com",
+        password_hash=hash_password("password123"),
+        full_name="Unverified User",
+        role="athlete",
+        email_verified=False,
+    )
+    db.add(unverified_user)
+    db.commit()
+    db.refresh(unverified_user)
+    db.close()
+
+    resp6 = client.post("/auth/login", json={"identifier": "unverified_user", "password": "password123"})
+    assert resp6.status_code == 403
+    assert "email not verified" in resp6.json()["detail"].lower()
+
+    # Rate limiting: 5 failed attempts allowed, 6th is blocked
+    # Attempt 1 (already done in resp4)
+    # Attempt 2
+    client.post("/auth/login", json={"identifier": "hardened_user", "password": "wrong_password"})
+    # Attempt 3
+    client.post("/auth/login", json={"identifier": "hardened_user", "password": "wrong_password"})
+    # Attempt 4
+    client.post("/auth/login", json={"identifier": "hardened_user", "password": "wrong_password"})
+    # Attempt 5
+    client.post("/auth/login", json={"identifier": "hardened_user", "password": "wrong_password"})
+
+    # Check 6th is blocked
+    resp_blocked = client.post("/auth/login", json={"identifier": "hardened_user", "password": "wrong_password"})
+    assert resp_blocked.status_code == 429
+    assert "too many login attempts" in resp_blocked.json()["detail"].lower()
+
+    # Correct password after block is still blocked
+    resp_correct_blocked = client.post("/auth/login", json={"identifier": "hardened_user", "password": "password123"})
+    assert resp_correct_blocked.status_code == 429
+
+    # Successful login clears attempts (simulate time pass by updating last_attempt_at)
+    db = TestingSessionLocal()
+    attempt = db.scalar(select(LoginAttempt).where(LoginAttempt.identifier == "hardened_user"))
+    attempt.last_attempt_at = attempt.last_attempt_at - timedelta(minutes=16)
+    db.commit()
+    db.close()
+
+    # Now login with correct password should succeed and clear the attempt entry
+    resp_after_cooldown = client.post("/auth/login", json={"identifier": "hardened_user", "password": "password123"})
+    assert resp_after_cooldown.status_code == 200
+
+    # Verify database attempts entry is cleared
+    db = TestingSessionLocal()
+    attempt_cleared = db.scalar(select(LoginAttempt).where(LoginAttempt.identifier == "hardened_user"))
+    assert attempt_cleared is None
+    db.close()
+

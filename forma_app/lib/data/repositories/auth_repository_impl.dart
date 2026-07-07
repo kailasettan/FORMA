@@ -36,10 +36,10 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<User> login({required String email, required String password}) async {
+  Future<User> login({required String identifier, required String password}) async {
     final response = await _apiClient.post(
       '/auth/login',
-      body: {'email': email, 'password': password},
+      body: {'identifier': identifier, 'password': password},
       authenticated: false,
     );
     final authResponse = AuthResponse.fromJson(

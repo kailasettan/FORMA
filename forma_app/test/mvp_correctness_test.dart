@@ -132,7 +132,7 @@ class FakeStatsRepository implements StatsRepository {
 
 class FakeAuthRepository implements AuthRepository {
   @override
-  Future<User> login({required String email, required String password}) async {
+  Future<User> login({required String identifier, required String password}) async {
     throw UnimplementedError();
   }
 

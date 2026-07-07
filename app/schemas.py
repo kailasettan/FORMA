@@ -1,9 +1,20 @@
+import re
 from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.models import SkillLevel, Sport
+
+USERNAME_ERROR = "Username can only use lowercase letters, numbers, dots, and underscores."
+USERNAME_PATTERN = re.compile(r"^(?![._])(?!.*\.\.)[a-z0-9._]{3,30}(?<![._])$")
+
+
+def normalize_username(value: str) -> str:
+    username = value.strip().lower()
+    if not USERNAME_PATTERN.fullmatch(username):
+        raise ValueError(USERNAME_ERROR)
+    return username
 
 
 # Sport Catalog Schemas
@@ -57,11 +68,16 @@ class PrivateUserOut(UserOut):
 
 
 class SignUpIn(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
+    username: str
     email: EmailStr
     password: str = Field(min_length=8)
     full_name: str = Field(min_length=1)
     role: str = "athlete"  # athlete or scout
+
+    @field_validator("username")
+    @classmethod
+    def username_must_be_valid(cls, value: str) -> str:
+        return normalize_username(value)
 
     @field_validator("password")
     @classmethod
@@ -72,7 +88,7 @@ class SignUpIn(BaseModel):
 
 
 class LoginIn(BaseModel):
-    email: EmailStr
+    identifier: str = Field(min_length=1)
     password: str
 
 
@@ -123,7 +139,7 @@ class AuthOut(BaseModel):
 
 
 class UserUpdateIn(BaseModel):
-    username: str | None = Field(default=None, min_length=3, max_length=50)
+    username: str | None = None
     full_name: str | None = Field(default=None, min_length=1)
     age: int | None = Field(default=None, ge=0)
     city: str | None = None
@@ -136,6 +152,13 @@ class UserUpdateIn(BaseModel):
     availability: str | None = None
     preferred_opportunity_types: list[str] | None = None
     focused_sport_id: UUID | None = None
+
+    @field_validator("username")
+    @classmethod
+    def username_must_be_valid(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return normalize_username(value)
 
 
 # Player Profile Schemas

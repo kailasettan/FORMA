@@ -9,7 +9,7 @@ abstract class AuthRepository {
     String role = 'athlete',
   });
 
-  Future<User> login({required String email, required String password});
+  Future<User> login({required String identifier, required String password});
 
   Future<User?> checkAuth();
 
