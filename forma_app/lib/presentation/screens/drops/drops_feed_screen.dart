@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../domain/entities/drop.dart';
@@ -23,6 +24,17 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
   final PageController _pageController = PageController();
   late final DropVideoControllerWindow _videoWindow;
   int _focusedIndex = 0;
+  DateTime? _lastScrollTime;
+
+  bool get _isWebOrDesktop {
+    return defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux;
+  }
+
+  ScrollPhysics? get _scrollPhysics {
+    return _isWebOrDesktop ? const NeverScrollableScrollPhysics() : null;
+  }
 
   @override
   bool get wantKeepAlive => true;
@@ -38,26 +50,42 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
     });
   }
 
-  /// Triggers the first feed load only if auth is already confirmed and a load
-  /// has not been attempted yet. Safe to call multiple times — the cubit guards
-  /// duplicate in-flight requests via the `isLoading` flag.
-  void _triggerInitialLoad() {
+  /// Triggers the first feed load only if auth is already confirmed.
+  /// Safe to call multiple times — the cubit guards duplicate in-flight requests.
+  void _triggerInitialLoad({bool force = false}) {
     if (!mounted) return;
     final feedState = context.read<DropFeedCubit>().state;
-    if (feedState.isLoading || feedState.hasAttemptedLoad) {
-      _debugFeedLog(
-        'initLoad skipped: isLoading=${feedState.isLoading} '
-        'hasAttempted=${feedState.hasAttemptedLoad}',
-      );
+    if (feedState.isLoading) {
+      _debugFeedLog('initLoad skipped: already loading');
       return;
     }
     final authState = context.read<AuthCubit>().state;
     if (authState is! AuthAuthenticated) {
-      // Auth not ready yet. The BlocListener below will fire when it is.
       _debugFeedLog('initLoad deferred: auth state=${authState.runtimeType}');
       return;
     }
-    _debugFeedLog('initLoad starting (auth confirmed)');
+
+    bool shouldTrigger = false;
+    if (!feedState.hasAttemptedLoad) {
+      shouldTrigger = true;
+    } else {
+      // If we already attempted to load, trigger if drops are empty and:
+      // - an error exists (reload failed), OR
+      // - we are forcing it (auth just became authenticated, or screen became active again)
+      if (feedState.drops.isEmpty && (feedState.error != null || force)) {
+        shouldTrigger = true;
+      }
+    }
+
+    if (!shouldTrigger) {
+      _debugFeedLog(
+        'initLoad skipped: hasAttemptedLoad=${feedState.hasAttemptedLoad} '
+        'dropsEmpty=${feedState.drops.isEmpty} force=$force',
+      );
+      return;
+    }
+
+    _debugFeedLog('initLoad starting (auth confirmed, force=$force)');
     context.read<DropFeedCubit>().loadInitial();
   }
 
@@ -66,6 +94,10 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
     super.didUpdateWidget(oldWidget);
     if (widget.isActive != oldWidget.isActive) {
       _syncVideoWindow(context.read<DropFeedCubit>().state.drops);
+      if (widget.isActive) {
+        _debugFeedLog('screen became active again');
+        _triggerInitialLoad(force: true);
+      }
     }
   }
 
@@ -75,6 +107,35 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
     _videoWindow.disposeAll();
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _handlePointerScroll(PointerScrollEvent event, int totalItems) {
+    final double dy = event.scrollDelta.dy;
+    if (dy == 0) return;
+
+    final now = DateTime.now();
+    if (_lastScrollTime != null &&
+        now.difference(_lastScrollTime!) < const Duration(milliseconds: 400)) {
+      return;
+    }
+
+    _lastScrollTime = now;
+
+    if (dy > 0) {
+      if (_pageController.hasClients && _focusedIndex < totalItems - 1) {
+        _pageController.nextPage(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    } else if (dy < 0) {
+      if (_pageController.hasClients && _focusedIndex > 0) {
+        _pageController.previousPage(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    }
   }
 
   void _debugFeedLog(String message) {
@@ -116,7 +177,7 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
     return Stack(
       children: [
         // Re-trigger feed load if auth becomes ready after the screen was built.
-        // This handles the case where checkAuth() completes after initState fires.
+        // This handles the case where checkAuth() completes after initState fires
         BlocListener<AuthCubit, AuthState>(
           listenWhen: (previous, current) =>
               current is AuthAuthenticated && previous is! AuthAuthenticated,
@@ -124,7 +185,10 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
             _debugFeedLog(
               'auth became authenticated; checking whether feed needs load',
             );
-            _triggerInitialLoad();
+            final feedState = context.read<DropFeedCubit>().state;
+            if (feedState.drops.isEmpty && !feedState.isLoading) {
+              _triggerInitialLoad(force: true);
+            }
           },
           child: BlocConsumer<DropFeedCubit, DropFeedState>(
             listenWhen: (previous, current) =>
@@ -156,10 +220,13 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
                 );
               }
 
-              return PageView.builder(
+              final totalItems =
+                  state.drops.length + (state.isLoadingMore ? 1 : 0);
+              Widget pageView = PageView.builder(
                 controller: _pageController,
                 scrollDirection: Axis.vertical,
-                itemCount: state.drops.length + (state.isLoadingMore ? 1 : 0),
+                physics: _scrollPhysics,
+                itemCount: totalItems,
                 onPageChanged: (index) {
                   _videoWindow.pauseIndex(_focusedIndex);
                   setState(() {
@@ -199,6 +266,18 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
                   );
                 },
               );
+
+              if (_isWebOrDesktop) {
+                return Listener(
+                  onPointerSignal: (pointerSignal) {
+                    if (pointerSignal is PointerScrollEvent) {
+                      _handlePointerScroll(pointerSignal, totalItems);
+                    }
+                  },
+                  child: pageView,
+                );
+              }
+              return pageView;
             },
           ),
         ),

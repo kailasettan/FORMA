@@ -33,6 +33,8 @@ import 'package:forma/presentation/screens/dashboard_screen.dart';
 import 'package:forma/presentation/screens/profile/edit_profile_screen.dart';
 import 'package:forma/presentation/screens/profile/profile_form_screen.dart';
 import 'package:forma/presentation/screens/settings/settings_screen.dart';
+import 'package:forma/presentation/cubits/drop_feed_cubit.dart';
+import 'package:forma/presentation/screens/drops/drops_feed_screen.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:io';
 
@@ -1387,5 +1389,54 @@ void main() {
 
     await themeCubit.close();
     await newCubit.close();
+  });
+
+  testWidgets('DropsFeedScreen triggers loadInitial on AuthAuthenticated', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+    final dropRepo = FakeDropRepository();
+    final catalogRepo = FakeCatalogRepository();
+
+    final authCubit = AuthCubit(authRepo);
+    final dropFeedCubit = DropFeedCubit(dropRepo);
+    final catalogCubit = CatalogCubit(catalogRepo);
+
+    await tester.pumpWidget(
+      MultiBlocProvider(
+        providers: [
+          BlocProvider<AuthCubit>.value(value: authCubit),
+          BlocProvider<DropFeedCubit>.value(value: dropFeedCubit),
+          BlocProvider<CatalogCubit>.value(value: catalogCubit),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: DropsFeedScreen(isActive: true)),
+        ),
+      ),
+    );
+
+    // Initial state: not authenticated, drops should not load
+    await tester.pump();
+    expect(dropFeedCubit.state.hasAttemptedLoad, isFalse);
+
+    // Now emit AuthAuthenticated
+    final testUser = User(
+      id: 'user-123',
+      username: 'testuser',
+      email: 'test@example.com',
+      fullName: 'Test User',
+      role: 'athlete',
+      createdAt: DateTime(2026),
+      emailVerified: true,
+    );
+    authCubit.emit(AuthAuthenticated(testUser));
+    await tester.pump();
+
+    // Verify it triggered loadInitial
+    expect(dropFeedCubit.state.hasAttemptedLoad, isTrue);
+
+    await authCubit.close();
+    await dropFeedCubit.close();
+    await catalogCubit.close();
   });
 }
