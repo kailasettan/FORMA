@@ -104,6 +104,8 @@ class FakeDropRepository implements DropRepository {
   int publishCount = 0;
   Object? uploadError;
   Object? publishError;
+  Object? feedError;
+  Completer<DropFeedPage>? feedCompleter;
   Map<String, dynamic>? cloudinaryResponse;
   Drop drop = makeDrop();
 
@@ -172,7 +174,13 @@ class FakeDropRepository implements DropRepository {
     String? cursor,
     int limit = 10,
     String? sportId,
-  }) async => DropFeedPage(items: [drop]);
+  }) async {
+    if (feedCompleter != null) {
+      return feedCompleter!.future;
+    }
+    if (feedError != null) throw feedError!;
+    return DropFeedPage(items: [drop]);
+  }
 
   @override
   Future<List<Drop>> getUserDrops(String userId) async => [drop];
@@ -631,6 +639,67 @@ void main() {
       cubit.insertNewlyCreatedDrop(drop);
 
       expect(cubit.state.drops, isEmpty);
+    });
+  });
+
+  group('DropFeedCubit Startup Sequencing', () {
+    test('hasAttemptedLoad is false before any loadInitial call', () {
+      final repository = FakeDropRepository();
+      final cubit = DropFeedCubit(repository);
+
+      expect(cubit.state.hasAttemptedLoad, isFalse);
+    });
+
+    test(
+      'hasAttemptedLoad is true immediately after loadInitial starts',
+      () async {
+        final completer = Completer<DropFeedPage>();
+        final repository = FakeDropRepository();
+        repository.feedCompleter = completer;
+        final cubit = DropFeedCubit(repository);
+
+        // Start the load but don't await it yet — state should already be updated
+        final future = cubit.loadInitial();
+        expect(cubit.state.hasAttemptedLoad, isTrue);
+        expect(cubit.state.isLoading, isTrue);
+
+        // Complete the load
+        completer.complete(DropFeedPage(items: [repository.drop]));
+        await future;
+
+        expect(cubit.state.hasAttemptedLoad, isTrue);
+        expect(cubit.state.isLoading, isFalse);
+        expect(cubit.state.drops, isNotEmpty);
+      },
+    );
+
+    test('hasAttemptedLoad remains true after load failure', () async {
+      final repository = FakeDropRepository();
+      repository.feedError = Exception('Network failed');
+      final cubit = DropFeedCubit(repository);
+
+      await cubit.loadInitial();
+
+      expect(cubit.state.hasAttemptedLoad, isTrue);
+      expect(cubit.state.isLoading, isFalse);
+      expect(cubit.state.error, isNotNull);
+      expect(cubit.state.drops, isEmpty);
+    });
+
+    test('second loadInitial after failure can succeed', () async {
+      final repository = FakeDropRepository();
+      repository.feedError = Exception('Network failed');
+      final cubit = DropFeedCubit(repository);
+
+      await cubit.loadInitial();
+      expect(cubit.state.error, isNotNull);
+
+      repository.feedError = null; // Recover from error
+      await cubit.loadInitial();
+
+      expect(cubit.state.error, isNull);
+      expect(cubit.state.drops, isNotEmpty);
+      expect(cubit.state.hasAttemptedLoad, isTrue);
     });
   });
 }

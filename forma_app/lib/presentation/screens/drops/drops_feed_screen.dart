@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../domain/entities/drop.dart';
 import '../../../domain/entities/sport.dart';
+import '../../cubits/auth_cubit.dart';
 import '../../cubits/catalog_cubit.dart';
 import '../../cubits/drop_feed_cubit.dart';
 import '../../theme.dart';
@@ -32,8 +34,31 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
     WidgetsBinding.instance.addObserver(_videoWindow);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CatalogCubit>().loadSportsAndCategories();
-      context.read<DropFeedCubit>().loadInitial();
+      _triggerInitialLoad();
     });
+  }
+
+  /// Triggers the first feed load only if auth is already confirmed and a load
+  /// has not been attempted yet. Safe to call multiple times — the cubit guards
+  /// duplicate in-flight requests via the `isLoading` flag.
+  void _triggerInitialLoad() {
+    if (!mounted) return;
+    final feedState = context.read<DropFeedCubit>().state;
+    if (feedState.isLoading || feedState.hasAttemptedLoad) {
+      _debugFeedLog(
+        'initLoad skipped: isLoading=${feedState.isLoading} '
+        'hasAttempted=${feedState.hasAttemptedLoad}',
+      );
+      return;
+    }
+    final authState = context.read<AuthCubit>().state;
+    if (authState is! AuthAuthenticated) {
+      // Auth not ready yet. The BlocListener below will fire when it is.
+      _debugFeedLog('initLoad deferred: auth state=${authState.runtimeType}');
+      return;
+    }
+    _debugFeedLog('initLoad starting (auth confirmed)');
+    context.read<DropFeedCubit>().loadInitial();
   }
 
   @override
@@ -50,6 +75,10 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
     _videoWindow.disposeAll();
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _debugFeedLog(String message) {
+    if (kDebugMode) debugPrint('[DropsFeed] $message');
   }
 
   void _refreshVideoState() {
@@ -86,80 +115,92 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
     super.build(context);
     return Stack(
       children: [
-        BlocConsumer<DropFeedCubit, DropFeedState>(
+        // Re-trigger feed load if auth becomes ready after the screen was built.
+        // This handles the case where checkAuth() completes after initState fires.
+        BlocListener<AuthCubit, AuthState>(
           listenWhen: (previous, current) =>
-              previous.drops != current.drops ||
-              previous.isLoadingMore != current.isLoadingMore,
+              current is AuthAuthenticated && previous is! AuthAuthenticated,
           listener: (context, state) {
-            _syncVideoWindow(state.drops);
-          },
-          builder: (context, state) {
-            if (state.isLoading && state.drops.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (state.error != null && state.drops.isEmpty) {
-              return _FeedMessage(
-                icon: Icons.wifi_off_rounded,
-                message: state.error!,
-                actionLabel: 'RETRY',
-                onAction: () => context.read<DropFeedCubit>().loadInitial(
-                  sportId: state.selectedSportId,
-                ),
-              );
-            }
-
-            if (state.drops.isEmpty) {
-              return const _FeedMessage(
-                icon: Icons.video_library_outlined,
-                message: 'No Drops yet.',
-              );
-            }
-
-            return PageView.builder(
-              controller: _pageController,
-              scrollDirection: Axis.vertical,
-              itemCount: state.drops.length + (state.isLoadingMore ? 1 : 0),
-              onPageChanged: (index) {
-                _videoWindow.pauseIndex(_focusedIndex);
-                setState(() {
-                  _focusedIndex = index;
-                });
-                _syncVideoWindow(state.drops);
-                if (index >= state.drops.length - 3) {
-                  context.read<DropFeedCubit>().loadMore();
-                }
-              },
-              itemBuilder: (context, index) {
-                if (index >= state.drops.length) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final drop = state.drops[index];
-                return DropVideoPlayerItem(
-                  drop: drop,
-                  isFocused: widget.isActive && index == _focusedIndex,
-                  controller: _videoWindow.controllerFor(index),
-                  isInitializing: _videoWindow.isInitializing(index),
-                  videoError: _videoWindow.errorFor(index),
-                  showBackButton: false,
-                  onRetryVideo: () => _videoWindow.retry(
-                    index: index,
-                    drops: state.drops,
-                    currentIndex: _focusedIndex,
-                    shouldPlayCurrent: widget.isActive,
-                  ),
-                  onDropUpdated: (_) {},
-                  onToggleProps: (dropId) =>
-                      context.read<DropFeedCubit>().toggleProps(dropId),
-                  onCommentsCountUpdated: (dropId, count) => context
-                      .read<DropFeedCubit>()
-                      .updateCommentCount(dropId, count),
-                  onPauseForOverlay: _videoWindow.suppressPlayback,
-                  onResumeAfterOverlay: _videoWindow.resumePlayback,
-                );
-              },
+            _debugFeedLog(
+              'auth became authenticated; checking whether feed needs load',
             );
+            _triggerInitialLoad();
           },
+          child: BlocConsumer<DropFeedCubit, DropFeedState>(
+            listenWhen: (previous, current) =>
+                previous.drops != current.drops ||
+                previous.isLoadingMore != current.isLoadingMore,
+            listener: (context, state) {
+              _syncVideoWindow(state.drops);
+            },
+            builder: (context, state) {
+              if (state.isLoading && state.drops.isEmpty) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (state.error != null && state.drops.isEmpty) {
+                return _FeedMessage(
+                  icon: Icons.wifi_off_rounded,
+                  message: 'Could not load Drops. Check your connection.',
+                  actionLabel: 'RETRY',
+                  onAction: () => context.read<DropFeedCubit>().loadInitial(
+                    sportId: state.selectedSportId,
+                  ),
+                );
+              }
+
+              if (state.drops.isEmpty) {
+                return const _FeedMessage(
+                  icon: Icons.video_library_outlined,
+                  message: 'No Drops yet.',
+                );
+              }
+
+              return PageView.builder(
+                controller: _pageController,
+                scrollDirection: Axis.vertical,
+                itemCount: state.drops.length + (state.isLoadingMore ? 1 : 0),
+                onPageChanged: (index) {
+                  _videoWindow.pauseIndex(_focusedIndex);
+                  setState(() {
+                    _focusedIndex = index;
+                  });
+                  _syncVideoWindow(state.drops);
+                  if (index >= state.drops.length - 3) {
+                    context.read<DropFeedCubit>().loadMore();
+                  }
+                },
+                itemBuilder: (context, index) {
+                  if (index >= state.drops.length) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final drop = state.drops[index];
+                  return DropVideoPlayerItem(
+                    drop: drop,
+                    isFocused: widget.isActive && index == _focusedIndex,
+                    controller: _videoWindow.controllerFor(index),
+                    isInitializing: _videoWindow.isInitializing(index),
+                    videoError: _videoWindow.errorFor(index),
+                    showBackButton: false,
+                    onRetryVideo: () => _videoWindow.retry(
+                      index: index,
+                      drops: state.drops,
+                      currentIndex: _focusedIndex,
+                      shouldPlayCurrent: widget.isActive,
+                    ),
+                    onDropUpdated: (_) {},
+                    onToggleProps: (dropId) =>
+                        context.read<DropFeedCubit>().toggleProps(dropId),
+                    onCommentsCountUpdated: (dropId, count) => context
+                        .read<DropFeedCubit>()
+                        .updateCommentCount(dropId, count),
+                    onPauseForOverlay: _videoWindow.suppressPlayback,
+                    onResumeAfterOverlay: _videoWindow.resumePlayback,
+                  );
+                },
+              );
+            },
+          ),
         ),
         Positioned(
           top: 0,

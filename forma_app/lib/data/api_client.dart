@@ -57,6 +57,7 @@ class ApiClient {
     final uri = _uri(path);
     try {
       final headers = await _getHeaders(authenticated: authenticated);
+      _debugLogAuthHeader('GET', uri, authenticated, headers);
 
       final response = await _client
           .get(uri, headers: headers)
@@ -155,6 +156,21 @@ class ApiClient {
   void _debugLogResponse(String method, Uri uri, int statusCode) {
     if (!kDebugMode) return;
     debugPrint('HTTP $method ${uri.host}${uri.path} -> $statusCode');
+  }
+
+  /// Logs whether the Authorization header is present on authenticated requests.
+  /// Never logs the token value.
+  void _debugLogAuthHeader(
+    String method,
+    Uri uri,
+    bool authenticated,
+    Map<String, String> headers,
+  ) {
+    if (!kDebugMode || !authenticated) return;
+    final hasAuth = headers.containsKey('Authorization');
+    debugPrint(
+      'HTTP $method ${uri.host}${uri.path} auth=${hasAuth ? "yes" : "MISSING"}',
+    );
   }
 
   void _debugLogError(String method, Uri uri, Object error) {

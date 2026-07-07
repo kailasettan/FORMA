@@ -11,6 +11,10 @@ class DropFeedState extends Equatable {
   final bool isLoadingMore;
   final String? error;
   final Set<String> togglingPropIds;
+  // True once loadInitial() has been called at least once. Lets the UI
+  // distinguish "never started" from "started but empty" so the auth listener
+  // can safely re-trigger a load without causing duplicate requests.
+  final bool hasAttemptedLoad;
 
   const DropFeedState({
     this.drops = const [],
@@ -20,6 +24,7 @@ class DropFeedState extends Equatable {
     this.isLoadingMore = false,
     this.error,
     this.togglingPropIds = const {},
+    this.hasAttemptedLoad = false,
   });
 
   bool get hasMore => nextCursor != null;
@@ -32,6 +37,7 @@ class DropFeedState extends Equatable {
     bool? isLoadingMore,
     Object? error = _sentinel,
     Set<String>? togglingPropIds,
+    bool? hasAttemptedLoad,
   }) {
     return DropFeedState(
       drops: drops ?? this.drops,
@@ -45,6 +51,7 @@ class DropFeedState extends Equatable {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       error: identical(error, _sentinel) ? this.error : error as String?,
       togglingPropIds: togglingPropIds ?? this.togglingPropIds,
+      hasAttemptedLoad: hasAttemptedLoad ?? this.hasAttemptedLoad,
     );
   }
 
@@ -57,6 +64,7 @@ class DropFeedState extends Equatable {
     isLoadingMore,
     error,
     togglingPropIds,
+    hasAttemptedLoad,
   ];
 }
 
@@ -74,6 +82,7 @@ class DropFeedCubit extends Cubit<DropFeedState> {
         error: null,
         selectedSportId: sportId,
         nextCursor: null,
+        hasAttemptedLoad: true,
       ),
     );
     try {
