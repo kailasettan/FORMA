@@ -141,13 +141,14 @@ class ApiClient {
   Uri _uri(String path) => ApiConfig.baseUri.resolve(path);
 
   NetworkException _networkExceptionFor(Object error) {
-    if (error is TimeoutException || error is http.ClientException) {
+    final detail = error.toString();
+    if (error is TimeoutException) {
       return NetworkException(
-        'Unable to reach FORMA. Check your internet connection.',
+        'Unable to reach FORMA (Connection timed out). Check your internet connection.',
       );
     }
     return NetworkException(
-      'Unable to reach FORMA. Check your internet connection.',
+      'Unable to reach FORMA ($detail). Check your internet connection.',
     );
   }
 
