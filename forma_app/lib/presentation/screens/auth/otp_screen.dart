@@ -18,7 +18,7 @@ class OtpScreen extends StatefulWidget {
 class _OtpScreenState extends State<OtpScreen> {
   final _formKey = GlobalKey<FormState>();
   final _otpController = TextEditingController();
-  
+
   int _cooldownSeconds = 60;
   Timer? _timer;
   bool _isResending = false;
@@ -67,7 +67,7 @@ class _OtpScreenState extends State<OtpScreen> {
     setState(() {
       _isResending = true;
     });
-    
+
     try {
       final authRepo = RepositoryProvider.of<AuthRepository>(context);
       await authRepo.resendOtp(email: widget.email);
@@ -87,10 +87,7 @@ class _OtpScreenState extends State<OtpScreen> {
           errorMsg = errorMsg.replaceAll('ApiException:', '').trim();
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMsg),
-            backgroundColor: AppTheme.error,
-          ),
+          SnackBar(content: Text(errorMsg), backgroundColor: AppTheme.error),
         );
       }
     } finally {
@@ -113,7 +110,7 @@ class _OtpScreenState extends State<OtpScreen> {
             onPressed: () {
               context.read<AuthCubit>().logout();
             },
-          )
+          ),
         ],
       ),
       body: BlocListener<AuthCubit, AuthState>(
@@ -127,12 +124,17 @@ class _OtpScreenState extends State<OtpScreen> {
             );
           } else if (state is AuthError) {
             String displayMessage = state.message;
-            if (displayMessage.toLowerCase().contains('invalid verification code')) {
+            if (displayMessage.toLowerCase().contains(
+              'invalid verification code',
+            )) {
               displayMessage = 'Invalid verification code.';
             } else if (displayMessage.toLowerCase().contains('expired')) {
               displayMessage = 'Verification code has expired.';
-            } else if (displayMessage.toLowerCase().contains('too many failed attempts')) {
-              displayMessage = 'Too many failed attempts. Please request a new code.';
+            } else if (displayMessage.toLowerCase().contains(
+              'too many failed attempts',
+            )) {
+              displayMessage =
+                  'Too many failed attempts. Please request a new code.';
             }
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -161,7 +163,8 @@ class _OtpScreenState extends State<OtpScreen> {
                     Text(
                       'Enter Verification Code',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                           ),
@@ -237,7 +240,9 @@ class _OtpScreenState extends State<OtpScreen> {
                           style: TextStyle(color: AppTheme.textSecondary),
                         ),
                         GestureDetector(
-                          onTap: _cooldownSeconds > 0 || _isResending ? null : _resendCode,
+                          onTap: _cooldownSeconds > 0 || _isResending
+                              ? null
+                              : _resendCode,
                           child: Text(
                             _cooldownSeconds > 0
                                 ? 'Resend in ${_cooldownSeconds}s'

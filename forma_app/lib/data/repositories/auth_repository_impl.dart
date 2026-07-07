@@ -1,4 +1,5 @@
 import '../../domain/entities/user.dart';
+import '../../domain/entities/signup_result.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../api_client.dart';
 import '../models/auth_response.dart';
@@ -10,7 +11,7 @@ class AuthRepositoryImpl implements AuthRepository {
   AuthRepositoryImpl(this._apiClient);
 
   @override
-  Future<User> signUp({
+  Future<SignupResult> signUp({
     required String username,
     required String email,
     required String password,
@@ -32,11 +33,17 @@ class AuthRepositoryImpl implements AuthRepository {
       response as Map<String, dynamic>,
     );
     await _apiClient.saveToken(authResponse.accessToken);
-    return authResponse.user;
+    return SignupResult(
+      user: authResponse.user,
+      verificationRequired: authResponse.verificationRequired,
+    );
   }
 
   @override
-  Future<User> login({required String identifier, required String password}) async {
+  Future<User> login({
+    required String identifier,
+    required String password,
+  }) async {
     final response = await _apiClient.post(
       '/auth/login',
       body: {'identifier': identifier, 'password': password},

@@ -90,6 +90,7 @@ void main() {
       final json = {
         'access_token': 'secret_jwt_token',
         'token_type': 'bearer',
+        'verification_required': true,
         'user': {
           'id': 'b102b54c-53e7-4008-8e68-3e40632b6941',
           'username': 'johndoe',
@@ -107,6 +108,7 @@ void main() {
       expect(authResponse.accessToken, 'secret_jwt_token');
       expect(authResponse.tokenType, 'bearer');
       expect(authResponse.user.username, 'johndoe');
+      expect(authResponse.verificationRequired, isTrue);
     });
 
     test('AggregatedStatsModel should parse football stats correctly', () {

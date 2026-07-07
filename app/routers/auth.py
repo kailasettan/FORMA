@@ -220,13 +220,14 @@ def signup(payload: SignUpIn, db: Session = Depends(get_db)) -> AuthOut:
             detail = "Email is already registered."
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
+    verification_required = settings.require_signup_email_verification
     user = User(
         username=payload.username,
         email=payload.email,
         password_hash=hash_password(payload.password),
         full_name=payload.full_name,
         role="athlete",
-        email_verified=False,
+        email_verified=not verification_required,
     )
     db.add(user)
     try:
@@ -239,17 +240,21 @@ def signup(payload: SignUpIn, db: Session = Depends(get_db)) -> AuthOut:
         ) from None
     db.refresh(user)
 
-    # Generate and send OTP
-    otp = generate_and_save_otp(db, user, EMAIL_VERIFICATION_PURPOSE)
-    try:
-        send_otp_email(user.email, otp, purpose=EMAIL_VERIFICATION_PURPOSE)
-    except HTTPException:
-        logger.exception(
-            "Signup OTP email send failed after OTP row creation for %s",
-            normalize_email_for_log(user.email),
-        )
+    if verification_required:
+        otp = generate_and_save_otp(db, user, EMAIL_VERIFICATION_PURPOSE)
+        try:
+            send_otp_email(user.email, otp, purpose=EMAIL_VERIFICATION_PURPOSE)
+        except HTTPException:
+            logger.exception(
+                "Signup OTP email send failed after OTP row creation for %s",
+                normalize_email_for_log(user.email),
+            )
 
-    return AuthOut(access_token=create_access_token(user.id), user=user)
+    return AuthOut(
+        access_token=create_access_token(user.id),
+        user=user,
+        verification_required=verification_required,
+    )
 
 
 @router.post("/login", response_model=AuthOut)

@@ -85,7 +85,8 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
         return;
       }
 
-      final isVideo = file.path.toLowerCase().endsWith('.mp4') ||
+      final isVideo =
+          file.path.toLowerCase().endsWith('.mp4') ||
           file.path.toLowerCase().endsWith('.mov') ||
           file.path.toLowerCase().endsWith('.webm');
 
@@ -266,26 +267,27 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                           clipBehavior: Clip.antiAlias,
                           child: _videoFile != null
                               ? (_videoPlayerController != null
-                                  ? Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        VideoPlayer(_videoPlayerController!),
-                                        Container(
-                                          color: Colors.black26,
-                                          child: const Center(
-                                            child: Icon(
-                                              Icons.play_circle_outline_rounded,
-                                              size: 48,
-                                              color: Colors.white70,
+                                    ? Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          VideoPlayer(_videoPlayerController!),
+                                          Container(
+                                            color: Colors.black26,
+                                            child: const Center(
+                                              child: Icon(
+                                                Icons
+                                                    .play_circle_outline_rounded,
+                                                size: 48,
+                                                color: Colors.white70,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ],
-                                    )
-                                  : Image.file(
-                                      _videoFile!,
-                                      fit: BoxFit.cover,
-                                    ))
+                                        ],
+                                      )
+                                    : Image.file(
+                                        _videoFile!,
+                                        fit: BoxFit.cover,
+                                      ))
                               : Center(
                                   child: _isValidatingVideo
                                       ? const CircularProgressIndicator()
@@ -369,7 +371,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                           : (val) {
                               if (val != null) {
                                 setState(() {
-                                    _selectedAudience = val;
+                                  _selectedAudience = val;
                                 });
                               }
                             },

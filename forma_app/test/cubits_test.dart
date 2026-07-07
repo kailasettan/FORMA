@@ -11,6 +11,7 @@ import 'package:forma/domain/entities/drop.dart';
 import 'package:forma/domain/entities/drop_comment.dart';
 import 'package:forma/domain/entities/player_profile.dart';
 import 'package:forma/domain/entities/public_athlete_profile.dart';
+import 'package:forma/domain/entities/signup_result.dart';
 import 'package:forma/domain/entities/user.dart';
 import 'package:forma/domain/repositories/auth_repository.dart';
 import 'package:forma/domain/repositories/drop_repository.dart';
@@ -20,16 +21,20 @@ class FakeAuthRepository implements AuthRepository {
   User? mockUser;
   bool shouldThrow = false;
   bool shouldFailHealth = false;
+  bool signupVerificationRequired = false;
   String? savedToken;
 
   @override
-  Future<User> login({required String identifier, required String password}) async {
+  Future<User> login({
+    required String identifier,
+    required String password,
+  }) async {
     if (shouldThrow) throw Exception('Invalid credentials');
     return mockUser!;
   }
 
   @override
-  Future<User> signUp({
+  Future<SignupResult> signUp({
     required String username,
     required String email,
     required String password,
@@ -37,7 +42,10 @@ class FakeAuthRepository implements AuthRepository {
     String role = 'athlete',
   }) async {
     if (shouldThrow) throw Exception('Signup failed');
-    return mockUser!;
+    return SignupResult(
+      user: mockUser!,
+      verificationRequired: signupVerificationRequired,
+    );
   }
 
   @override

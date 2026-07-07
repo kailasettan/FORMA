@@ -7,8 +7,8 @@ class ThemeCubit extends Cubit<ThemeMode> {
   static const String themeKey = 'forma_theme_mode';
 
   ThemeCubit({FlutterSecureStorage? secureStorage})
-      : _secureStorage = secureStorage ?? const FlutterSecureStorage(),
-        super(ThemeMode.system) {
+    : _secureStorage = secureStorage ?? const FlutterSecureStorage(),
+      super(ThemeMode.system) {
     _loadThemeMode();
   }
 

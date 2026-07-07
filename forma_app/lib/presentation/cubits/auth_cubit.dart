@@ -16,10 +16,11 @@ class AuthLoading extends AuthState {}
 
 class AuthAuthenticated extends AuthState {
   final User user;
-  const AuthAuthenticated(this.user);
+  final bool verificationRequired;
+  const AuthAuthenticated(this.user, {this.verificationRequired = false});
 
   @override
-  List<Object?> get props => [user];
+  List<Object?> get props => [user, verificationRequired];
 }
 
 class AuthUnauthenticated extends AuthState {
@@ -99,14 +100,19 @@ class AuthCubit extends Cubit<AuthState> {
     emit(AuthLoading());
     try {
       await _authRepository.healthCheck();
-      final user = await _authRepository.signUp(
+      final result = await _authRepository.signUp(
         username: username,
         email: email,
         password: password,
         fullName: fullName,
         role: role,
       );
-      emit(AuthAuthenticated(user));
+      emit(
+        AuthAuthenticated(
+          result.user,
+          verificationRequired: result.verificationRequired,
+        ),
+      );
     } catch (e) {
       emit(AuthError(e.toString()));
     }

@@ -395,7 +395,9 @@ class DropUploadCubit extends Cubit<DropUploadState> {
       );
     }
     if (json['resource_type'] != 'video' && json['resource_type'] != 'image') {
-      throw Exception('Cloudinary rejected the upload: asset is not a video or image.');
+      throw Exception(
+        'Cloudinary rejected the upload: asset is not a video or image.',
+      );
     }
   }
 

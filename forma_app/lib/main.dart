@@ -166,9 +166,7 @@ class FormaApp extends StatelessWidget {
           BlocProvider<ScoutShortlistCubit>(
             create: (context) => ScoutShortlistCubit(scoutRepository),
           ),
-          BlocProvider<ThemeCubit>(
-            create: (context) => ThemeCubit(),
-          ),
+          BlocProvider<ThemeCubit>(create: (context) => ThemeCubit()),
         ],
         child: BlocBuilder<ThemeCubit, ThemeMode>(
           builder: (context, themeMode) {

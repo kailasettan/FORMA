@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     from_email: str = Field(default="onboarding@resend.dev", validation_alias=AliasChoices("FROM_EMAIL"))
     from_name: str = Field(default="FORMA", validation_alias=AliasChoices("FROM_NAME"))
     cors_allowed_origins: str = Field(default="", validation_alias=AliasChoices("CORS_ALLOWED_ORIGINS"))
+    require_signup_email_verification: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("REQUIRE_SIGNUP_EMAIL_VERIFICATION"),
+    )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

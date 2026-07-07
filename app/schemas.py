@@ -136,6 +136,7 @@ class AuthOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: PrivateUserOut
+    verification_required: bool = False
 
 
 class UserUpdateIn(BaseModel):

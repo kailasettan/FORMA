@@ -71,7 +71,9 @@ class _LoginScreenState extends State<LoginScreen> {
             String displayMessage = state.message;
             if (displayMessage.toLowerCase().contains('email not verified')) {
               final parts = displayMessage.split(':');
-              final email = parts.length > 1 ? parts[1].trim() : _emailController.text.trim().toLowerCase();
+              final email = parts.length > 1
+                  ? parts[1].trim()
+                  : _emailController.text.trim().toLowerCase();
               Navigator.pushNamed(
                 context,
                 AppRouter.otpVerification,
@@ -79,14 +81,21 @@ class _LoginScreenState extends State<LoginScreen> {
               );
               return;
             }
-            if (displayMessage.toLowerCase().contains('invalid email/username or password') ||
-                displayMessage.toLowerCase().contains('invalid email or password') ||
+            if (displayMessage.toLowerCase().contains(
+                  'invalid email/username or password',
+                ) ||
+                displayMessage.toLowerCase().contains(
+                  'invalid email or password',
+                ) ||
                 displayMessage.toLowerCase().contains('invalid credentials') ||
                 displayMessage.toLowerCase().contains('401')) {
               displayMessage = 'Invalid email/username or password.';
-            } else if (displayMessage.toLowerCase().contains('too many login attempts') ||
-                       displayMessage.toLowerCase().contains('429')) {
-              displayMessage = 'Too many login attempts. Please try again later.';
+            } else if (displayMessage.toLowerCase().contains(
+                  'too many login attempts',
+                ) ||
+                displayMessage.toLowerCase().contains('429')) {
+              displayMessage =
+                  'Too many login attempts. Please try again later.';
             }
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -145,7 +154,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           return 'Please enter your email or username';
                         }
                         if (val.contains('@')) {
-                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val)) {
+                          if (!RegExp(
+                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                          ).hasMatch(val)) {
                             return 'Please enter a valid email address';
                           }
                         } else {

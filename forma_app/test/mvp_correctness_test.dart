@@ -13,6 +13,7 @@ import 'package:forma/presentation/screens/stats/match_stat_form_screen.dart';
 import 'package:forma/domain/repositories/stats_repository.dart';
 import 'package:forma/domain/repositories/auth_repository.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:forma/domain/entities/signup_result.dart';
 import 'package:forma/domain/entities/user.dart';
 import 'package:forma/domain/entities/match_stat.dart';
 import 'package:forma/domain/entities/aggregated_stats.dart';
@@ -132,12 +133,15 @@ class FakeStatsRepository implements StatsRepository {
 
 class FakeAuthRepository implements AuthRepository {
   @override
-  Future<User> login({required String identifier, required String password}) async {
+  Future<User> login({
+    required String identifier,
+    required String password,
+  }) async {
     throw UnimplementedError();
   }
 
   @override
-  Future<User> signUp({
+  Future<SignupResult> signUp({
     required String username,
     required String email,
     required String password,

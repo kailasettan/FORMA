@@ -33,7 +33,10 @@ class SettingsScreen extends StatelessWidget {
     context.read<AuthCubit>().logout();
   }
 
-  void _showAppearanceBottomSheet(BuildContext settingsContext, ThemeMode currentMode) {
+  void _showAppearanceBottomSheet(
+    BuildContext settingsContext,
+    ThemeMode currentMode,
+  ) {
     showModalBottomSheet(
       context: settingsContext,
       shape: const RoundedRectangleBorder(
@@ -60,12 +63,30 @@ class SettingsScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                     const Text(
                       'Appearance',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    _buildThemeOption(context, themeMode, ThemeMode.system, 'System default'),
-                    _buildThemeOption(context, themeMode, ThemeMode.light, 'Light'),
-                    _buildThemeOption(context, themeMode, ThemeMode.dark, 'Dark'),
+                    _buildThemeOption(
+                      context,
+                      themeMode,
+                      ThemeMode.system,
+                      'System default',
+                    ),
+                    _buildThemeOption(
+                      context,
+                      themeMode,
+                      ThemeMode.light,
+                      'Light',
+                    ),
+                    _buildThemeOption(
+                      context,
+                      themeMode,
+                      ThemeMode.dark,
+                      'Dark',
+                    ),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -86,7 +107,9 @@ class SettingsScreen extends StatelessWidget {
     final isSelected = currentMode == mode;
     return ListTile(
       title: Text(label),
-      trailing: isSelected ? const Icon(Icons.check, color: AppTheme.primary) : null,
+      trailing: isSelected
+          ? const Icon(Icons.check, color: AppTheme.primary)
+          : null,
       onTap: () {
         context.read<ThemeCubit>().updateThemeMode(mode);
         Navigator.pop(context);
@@ -104,9 +127,9 @@ class SettingsScreen extends StatelessWidget {
           children: [
             Text(
               'Appearance',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Card(
@@ -134,13 +157,16 @@ class SettingsScreen extends StatelessWidget {
                         Text(
                           modeText,
                           style: TextStyle(
-                            color: Theme.of(context).textTheme.bodyMedium?.color,
+                            color: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.color,
                           ),
                         ),
                         const Icon(Icons.chevron_right_rounded, size: 20),
                       ],
                     ),
-                    onTap: () => _showAppearanceBottomSheet(context, currentMode),
+                    onTap: () =>
+                        _showAppearanceBottomSheet(context, currentMode),
                   );
                 },
               ),
@@ -148,9 +174,9 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               'Account',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Card(

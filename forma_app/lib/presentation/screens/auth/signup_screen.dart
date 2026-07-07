@@ -79,7 +79,7 @@ class _SignupScreenState extends State<SignupScreen> {
       body: BlocListener<AuthCubit, AuthState>(
         listener: (context, state) {
           if (state is AuthAuthenticated) {
-            if (!state.user.emailVerified) {
+            if (state.verificationRequired) {
               Navigator.pushNamedAndRemoveUntil(
                 context,
                 AppRouter.otpVerification,

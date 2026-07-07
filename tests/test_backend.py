@@ -124,6 +124,14 @@ app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def reset_signup_verification_setting():
+    original = settings.require_signup_email_verification
+    settings.require_signup_email_verification = True
+    yield
+    settings.require_signup_email_verification = original
+
+
 def create_test_user(username: str, role: str = "athlete") -> tuple[User, str]:
     db = TestingSessionLocal()
     user = User(
@@ -456,6 +464,7 @@ def test_signup_creates_unverified_user_and_sends_email():
         assert response.status_code == 201
         data = response.json()
         assert data["user"]["email_verified"] is False
+        assert data["verification_required"] is True
 
         mock_send.assert_called_once()
         assert mock_send.call_args[0][0] == email
@@ -473,6 +482,50 @@ def test_signup_creates_unverified_user_and_sends_email():
             assert otp_entry.attempts == 0
         finally:
             db.close()
+
+
+def test_signup_verification_disabled_creates_verified_user_without_signup_otp(mock_send_email):
+    settings.require_signup_email_verification = False
+    username = "verified_signup_user"
+    email = "verified_signup@example.com"
+
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": username,
+            "email": email,
+            "password": "password123",
+            "full_name": "Verified Signup User",
+            "role": "athlete",
+        },
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["verification_required"] is False
+    assert data["user"]["email_verified"] is True
+    mock_send_email.assert_not_called()
+
+    db = TestingSessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.username == username))
+        assert user is not None
+        assert user.email_verified is True
+        otp_entry = db.scalar(
+            select(EmailOTP).where(
+                EmailOTP.user_id == user.id,
+                EmailOTP.purpose == "email_verification",
+            )
+        )
+        assert otp_entry is None
+    finally:
+        db.close()
+
+    login_response = client.post(
+        "/auth/login",
+        json={"identifier": email, "password": "password123"},
+    )
+    assert login_response.status_code == 200
 
 
 def test_signup_creates_otp_even_if_email_send_fails(mock_send_email):
@@ -802,6 +855,45 @@ def test_forgot_password_sends_hashed_reset_otp_for_existing_email(mock_send_ema
         db.close()
 
 
+def test_forgot_password_still_creates_reset_otp_when_signup_verification_disabled(mock_send_email):
+    settings.require_signup_email_verification = False
+    user, _ = create_test_user("reset_with_signup_verification_off")
+
+    response = client.post(
+        "/auth/forgot-password",
+        json={"email": user.email},
+    )
+
+    assert response.status_code == 200
+    mock_send_email.assert_called_once()
+    assert mock_send_email.call_args.kwargs["purpose"] == "password_reset"
+    otp = mock_send_email.call_args[0][1]
+
+    db = TestingSessionLocal()
+    try:
+        reset_otp = db.scalar(
+            select(EmailOTP).where(
+                EmailOTP.user_id == user.id,
+                EmailOTP.purpose == "password_reset",
+            )
+        )
+        signup_otp = db.scalar(
+            select(EmailOTP).where(
+                EmailOTP.user_id == user.id,
+                EmailOTP.purpose == "email_verification",
+            )
+        )
+        assert reset_otp is not None
+        assert reset_otp.otp_hash != otp
+        assert reset_otp.expires_at is not None
+        assert reset_otp.attempts == 0
+        assert signup_otp is None
+        from app.security import verify_password
+        assert verify_password(otp, reset_otp.otp_hash)
+    finally:
+        db.close()
+
+
 def test_wrong_reset_otp_fails(mock_send_email):
     user, _ = create_test_user("wrong_reset")
     client.post("/auth/forgot-password", json={"email": user.email})
@@ -818,6 +910,25 @@ def test_wrong_reset_otp_fails(mock_send_email):
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid or expired reset code."
+
+
+def test_password_reset_still_requires_reset_otp_when_signup_verification_disabled(mock_send_email):
+    settings.require_signup_email_verification = False
+    user, _ = create_test_user("reset_requires_otp")
+
+    response = client.post(
+        "/auth/reset-password",
+        json={
+            "email": user.email,
+            "otp": "123456",
+            "new_password": "newpass123",
+            "confirm_password": "newpass123",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid or expired reset code."
+    mock_send_email.assert_not_called()
 
 
 def test_expired_reset_otp_fails(mock_send_email):

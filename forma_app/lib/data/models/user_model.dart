@@ -44,7 +44,9 @@ class UserModel extends User {
           : null,
       role: (json['role'] as String?) ?? 'athlete',
       focusedSportId: json['focused_sport_id'] as String?,
-      emailVerified: json['email_verified'] as bool? ?? (json['emailVerified'] as bool? ?? true),
+      emailVerified:
+          json['email_verified'] as bool? ??
+          (json['emailVerified'] as bool? ?? true),
     );
   }
 
