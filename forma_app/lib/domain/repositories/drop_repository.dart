@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+
 import '../entities/drop.dart';
 import '../entities/drop_comment.dart';
 
@@ -6,7 +7,7 @@ abstract class DropRepository {
   Future<Map<String, dynamic>> getUploadSignature();
 
   Future<Map<String, dynamic>> uploadToCloudinary({
-    required File file,
+    required XFile file,
     required Map<String, dynamic> signatureData,
     required Function(double progress) onProgress,
   });

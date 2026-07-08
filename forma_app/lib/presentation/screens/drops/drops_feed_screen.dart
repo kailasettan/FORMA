@@ -25,6 +25,7 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
   late final DropVideoControllerWindow _videoWindow;
   int _focusedIndex = 0;
   DateTime? _lastScrollTime;
+  bool _isAnimating = false;
 
   bool get _isWebOrDesktop {
     return defaultTargetPlatform == TargetPlatform.macOS ||
@@ -33,7 +34,9 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
   }
 
   ScrollPhysics? get _scrollPhysics {
-    return _isWebOrDesktop ? const NeverScrollableScrollPhysics() : null;
+    return _isWebOrDesktop
+        ? const NeverScrollableScrollPhysics()
+        : const OnePageScrollPhysics();
   }
 
   @override
@@ -109,7 +112,8 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
     super.dispose();
   }
 
-  void _handlePointerScroll(PointerScrollEvent event, int totalItems) {
+  void _handlePointerScroll(PointerScrollEvent event, int totalItems) async {
+    if (_isAnimating) return;
     final double dy = event.scrollDelta.dy;
     if (dy == 0) return;
 
@@ -123,17 +127,25 @@ class _DropsFeedScreenState extends State<DropsFeedScreen>
 
     if (dy > 0) {
       if (_pageController.hasClients && _focusedIndex < totalItems - 1) {
-        _pageController.nextPage(
+        _isAnimating = true;
+        await _pageController.nextPage(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );
+        if (mounted) {
+          _isAnimating = false;
+        }
       }
     } else if (dy < 0) {
       if (_pageController.hasClients && _focusedIndex > 0) {
-        _pageController.previousPage(
+        _isAnimating = true;
+        await _pageController.previousPage(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );
+        if (mounted) {
+          _isAnimating = false;
+        }
       }
     }
   }
@@ -444,5 +456,66 @@ class _FeedMessage extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class OnePageScrollPhysics extends PageScrollPhysics {
+  const OnePageScrollPhysics({super.parent});
+
+  @override
+  OnePageScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return OnePageScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  double _getPage(ScrollMetrics position) {
+    return position.pixels / position.viewportDimension;
+  }
+
+  double _getPixels(ScrollMetrics position, double page) {
+    return page * position.viewportDimension;
+  }
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    // If we're out of range and not headed back in range, defer to the parent
+    // ballistics, which should put us back in range at a page boundary.
+    if ((velocity <= 0.0 && position.pixels <= position.minScrollExtent) ||
+        (velocity >= 0.0 && position.pixels >= position.maxScrollExtent)) {
+      return super.createBallisticSimulation(position, velocity);
+    }
+
+    final Tolerance tolerance = toleranceFor(position);
+
+    // Original PageScrollPhysics target calculation logic
+    double page = _getPage(position);
+    if (velocity < -tolerance.velocity) {
+      page -= 0.5;
+    } else if (velocity > tolerance.velocity) {
+      page += 0.5;
+    }
+
+    // Clamp target page to currentPage ± 1
+    final double currentPage = position.pixels / position.viewportDimension;
+    final double closestPage = currentPage.roundToDouble();
+    final double targetPage = page.roundToDouble().clamp(
+      closestPage - 1.0,
+      closestPage + 1.0,
+    );
+
+    final double target = _getPixels(position, targetPage);
+
+    if (target != position.pixels) {
+      return ScrollSpringSimulation(
+        spring,
+        position.pixels,
+        target,
+        velocity,
+        tolerance: tolerance,
+      );
+    }
+    return null;
   }
 }

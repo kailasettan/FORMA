@@ -31,7 +31,10 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
   final _locationController = TextEditingController();
   final _imagePicker = ImagePicker();
 
-  File? _videoFile;
+  XFile? _mediaFile;
+  File? _mobileMediaFile;
+  Uint8List? _mediaPreviewBytes;
+  bool _selectedMediaIsVideo = false;
   VideoPlayerController? _videoPlayerController;
 
   String _selectedAudience = 'public';
@@ -72,8 +75,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
         return;
       }
 
-      final mediaFile = File(file.path);
-      final int fileBytes = await mediaFile.length();
+      final int fileBytes = await file.length();
       final double fileSizeMB = fileBytes / (1024 * 1024);
 
       if (fileSizeMB > 50) {
@@ -85,15 +87,28 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
         return;
       }
 
-      final isVideo =
-          file.path.toLowerCase().endsWith('.mp4') ||
-          file.path.toLowerCase().endsWith('.mov') ||
-          file.path.toLowerCase().endsWith('.webm');
+      final isVideo = _isVideoMedia(file);
+      final isImage = _isImageMedia(file);
+
+      if (!isVideo && !isImage) {
+        setState(() {
+          _videoValidationError =
+              'Unsupported media type. Please choose an MP4, MOV, WebM, JPG, PNG, or WebP file.';
+          _isValidatingVideo = false;
+        });
+        return;
+      }
 
       VideoPlayerController? controller;
-      if (isVideo) {
+      File? mobileMediaFile;
+      Uint8List? previewBytes;
+      if (!kIsWeb) {
+        mobileMediaFile = File(file.path);
+      }
+
+      if (isVideo && !kIsWeb && mobileMediaFile != null) {
         // Initialize Video Player to fetch duration/resolution details
-        controller = VideoPlayerController.file(mediaFile);
+        controller = VideoPlayerController.file(mobileMediaFile);
         await controller.initialize();
         final duration = controller.value.duration.inMilliseconds / 1000.0;
 
@@ -106,13 +121,18 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
           });
           return;
         }
+      } else if (!isVideo && kIsWeb) {
+        previewBytes = await file.readAsBytes();
       }
 
       // Dispose existing controller if any
       await _videoPlayerController?.dispose();
 
       setState(() {
-        _videoFile = mediaFile;
+        _mediaFile = file;
+        _mobileMediaFile = mobileMediaFile;
+        _mediaPreviewBytes = previewBytes;
+        _selectedMediaIsVideo = isVideo;
         _videoPlayerController = controller;
         _isValidatingVideo = false;
 
@@ -131,7 +151,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
   }
 
   void _submit() {
-    if (_videoFile == null) {
+    if (_mediaFile == null) {
       setState(() {
         _videoValidationError = 'Please select a video or photo to upload';
       });
@@ -140,7 +160,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
 
     if (_formKey.currentState!.validate()) {
       context.read<DropUploadCubit>().uploadDrop(
-        file: _videoFile!,
+        file: _mediaFile!,
         sportId: null,
         categoryId: null,
         caption: _captionController.text.trim().isNotEmpty
@@ -161,7 +181,10 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
     setState(() {
       _captionController.clear();
       _locationController.clear();
-      _videoFile = null;
+      _mediaFile = null;
+      _mobileMediaFile = null;
+      _mediaPreviewBytes = null;
+      _selectedMediaIsVideo = false;
       _videoPlayerController = null;
       _selectedAudience = 'public';
       _isValidatingVideo = false;
@@ -184,6 +207,25 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
     } else {
       Navigator.pop(context);
     }
+  }
+
+  bool _isVideoMedia(XFile file) {
+    final mimeType = file.mimeType?.toLowerCase();
+    final name = file.name.toLowerCase();
+    return mimeType?.startsWith('video/') == true ||
+        name.endsWith('.mp4') ||
+        name.endsWith('.mov') ||
+        name.endsWith('.webm');
+  }
+
+  bool _isImageMedia(XFile file) {
+    final mimeType = file.mimeType?.toLowerCase();
+    final name = file.name.toLowerCase();
+    return mimeType?.startsWith('image/') == true ||
+        name.endsWith('.jpg') ||
+        name.endsWith('.jpeg') ||
+        name.endsWith('.png') ||
+        name.endsWith('.webp');
   }
 
   @override
@@ -265,7 +307,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                             ),
                           ),
                           clipBehavior: Clip.antiAlias,
-                          child: _videoFile != null
+                          child: _mediaFile != null
                               ? (_videoPlayerController != null
                                     ? Stack(
                                         fit: StackFit.expand,
@@ -284,10 +326,7 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
                                           ),
                                         ],
                                       )
-                                    : Image.file(
-                                        _videoFile!,
-                                        fit: BoxFit.cover,
-                                      ))
+                                    : _buildSelectedMediaPreview())
                               : Center(
                                   child: _isValidatingVideo
                                       ? const CircularProgressIndicator()
@@ -451,6 +490,46 @@ class _DropUploadScreenState extends State<DropUploadScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSelectedMediaPreview() {
+    if (!_selectedMediaIsVideo) {
+      if (kIsWeb && _mediaPreviewBytes != null) {
+        return Image.memory(_mediaPreviewBytes!, fit: BoxFit.cover);
+      }
+      if (!kIsWeb && _mobileMediaFile != null) {
+        return Image.file(_mobileMediaFile!, fit: BoxFit.cover);
+      }
+    }
+
+    return Container(
+      color: Colors.black26,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _selectedMediaIsVideo
+                  ? Icons.video_file_rounded
+                  : Icons.image_rounded,
+              size: 48,
+              color: Colors.white70,
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                _mediaFile?.name ?? 'Selected media',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

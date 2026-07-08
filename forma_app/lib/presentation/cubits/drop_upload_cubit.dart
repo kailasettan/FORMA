@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../data/api_client.dart';
 import '../../domain/entities/drop.dart';
 import '../../domain/repositories/drop_repository.dart';
@@ -159,7 +159,7 @@ class PendingDropPublish {
 class DropUploadCubit extends Cubit<DropUploadState> {
   final DropRepository _dropRepository;
 
-  File? _lastFile;
+  XFile? _lastFile;
   String? _lastSportId;
   String? _lastCategoryId;
   String? _lastCaption;
@@ -172,7 +172,7 @@ class DropUploadCubit extends Cubit<DropUploadState> {
   DropUploadCubit(this._dropRepository) : super(const DropUploadInitial());
 
   Future<void> uploadDrop({
-    required File file,
+    required XFile file,
     String? sportId,
     String? categoryId,
     String? caption,

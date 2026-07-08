@@ -36,6 +36,7 @@ import 'package:forma/presentation/screens/settings/settings_screen.dart';
 import 'package:forma/presentation/cubits/drop_feed_cubit.dart';
 import 'package:forma/presentation/screens/drops/drops_feed_screen.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
 class FakeSecureStorage implements FlutterSecureStorage {
@@ -329,7 +330,7 @@ class FakeDropRepository implements DropRepository {
 
   @override
   Future<Map<String, dynamic>> uploadToCloudinary({
-    required File file,
+    required XFile file,
     required Map<String, dynamic> signatureData,
     required Function(double progress) onProgress,
   }) async => {};

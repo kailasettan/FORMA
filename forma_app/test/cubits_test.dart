@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forma/data/api_client.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:forma/presentation/cubits/drop_feed_cubit.dart';
 import 'package:forma/presentation/cubits/auth_cubit.dart';
 import 'package:forma/presentation/cubits/drop_upload_cubit.dart';
@@ -123,7 +124,7 @@ class FakeDropRepository implements DropRepository {
 
   @override
   Future<Map<String, dynamic>> uploadToCloudinary({
-    required File file,
+    required XFile file,
     required Map<String, dynamic> signatureData,
     required Function(double progress) onProgress,
   }) async {
@@ -519,7 +520,7 @@ void main() {
       final cubit = DropUploadCubit(repository);
 
       await cubit.uploadDrop(
-        file: tempVideo,
+        file: XFile(tempVideo.path, name: 'forma_test_upload.mp4'),
         sportId: 'sport_1',
         visibility: 'public',
       );
@@ -535,7 +536,7 @@ void main() {
       final cubit = DropUploadCubit(repository);
 
       await cubit.uploadDrop(
-        file: tempVideo,
+        file: XFile(tempVideo.path, name: 'forma_test_upload.mp4'),
         sportId: 'sport_1',
         visibility: 'public',
       );
@@ -558,7 +559,7 @@ void main() {
       final cubit = DropUploadCubit(repository);
 
       await cubit.uploadDrop(
-        file: tempVideo,
+        file: XFile(tempVideo.path, name: 'forma_test_upload.mp4'),
         sportId: 'sport_1',
         visibility: 'public',
       );
@@ -573,7 +574,7 @@ void main() {
       final cubit = DropUploadCubit(repository);
 
       await cubit.uploadDrop(
-        file: tempVideo,
+        file: XFile(tempVideo.path, name: 'forma_test_upload.mp4'),
         sportId: 'sport_1',
         visibility: 'public',
       );
@@ -602,7 +603,7 @@ void main() {
       final cubit = DropUploadCubit(repository);
 
       await cubit.uploadDrop(
-        file: tempVideo,
+        file: XFile(tempVideo.path, name: 'forma_test_upload.mp4'),
         sportId: 'missing_sport',
         visibility: 'public',
       );

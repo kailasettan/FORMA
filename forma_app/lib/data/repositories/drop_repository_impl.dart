@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/drop.dart';
 import '../../domain/entities/drop_comment.dart';
 import '../../domain/repositories/drop_repository.dart';
@@ -52,7 +54,7 @@ class DropRepositoryImpl implements DropRepository {
 
   @override
   Future<Map<String, dynamic>> uploadToCloudinary({
-    required File file,
+    required XFile file,
     required Map<String, dynamic> signatureData,
     required Function(double progress) onProgress,
   }) async {
@@ -81,15 +83,7 @@ class DropRepositoryImpl implements DropRepository {
     request.fields['unique_filename'] =
         signatureData['unique_filename'] as String;
 
-    // Add file
-    final fileStream = http.ByteStream(file.openRead());
-    final length = await file.length();
-    final multipartFile = http.MultipartFile(
-      'file',
-      fileStream,
-      length,
-      filename: file.path.split('/').last,
-    );
+    final multipartFile = await _multipartFileFromXFile(file);
     request.files.add(multipartFile);
 
     http.StreamedResponse streamedResponse;
@@ -121,6 +115,39 @@ class DropRepositoryImpl implements DropRepository {
     throw ApiException(
       _parseCloudinaryError(response.body, response.statusCode),
     );
+  }
+
+  Future<http.MultipartFile> _multipartFileFromXFile(XFile file) async {
+    if (kIsWeb) {
+      return http.MultipartFile.fromBytes(
+        'file',
+        await file.readAsBytes(),
+        filename: file.name.isNotEmpty ? file.name : 'drop_upload',
+        contentType: _mediaTypeFor(file),
+      );
+    }
+
+    final sourceFile = File(file.path);
+    final filename = file.name.isNotEmpty
+        ? file.name
+        : file.path.split('/').last;
+    return http.MultipartFile(
+      'file',
+      http.ByteStream(sourceFile.openRead()),
+      await sourceFile.length(),
+      filename: filename,
+      contentType: _mediaTypeFor(file),
+    );
+  }
+
+  MediaType? _mediaTypeFor(XFile file) {
+    final mimeType = file.mimeType;
+    if (mimeType == null || mimeType.trim().isEmpty) return null;
+    try {
+      return MediaType.parse(mimeType);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
