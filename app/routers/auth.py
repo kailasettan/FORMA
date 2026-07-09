@@ -193,6 +193,15 @@ def generate_and_save_otp(db: Session, user: User, purpose: str = EMAIL_VERIFICA
     return otp
 
 
+def cleanup_expired_unverified_users(db: Session) -> None:
+    cutoff = datetime.utcnow() - timedelta(hours=24)
+    db.query(User).filter(
+        User.email_verified == False,
+        User.created_at < cutoff,
+    ).delete(synchronize_session=False)
+    db.commit()
+
+
 @router.post("/signup", response_model=AuthOut, status_code=status.HTTP_201_CREATED)
 def signup(payload: SignUpIn, db: Session = Depends(get_db)) -> AuthOut:
     logger.warning("Auth endpoint reached: signup email=%s", normalize_email_for_log(str(payload.email)))
@@ -207,6 +216,8 @@ def signup(payload: SignUpIn, db: Session = Depends(get_db)) -> AuthOut:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Public signup role must be athlete.",
         )
+
+    cleanup_expired_unverified_users(db)
 
     existing = db.scalar(
         select(User).where(
@@ -331,7 +342,7 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> AuthOut:
 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Email not verified: {user.email}",
+            detail="Please verify your email before logging in.",
         )
 
     return AuthOut(access_token=create_access_token(user.id), user=user)

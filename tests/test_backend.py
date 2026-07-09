@@ -793,7 +793,7 @@ def test_unverified_user_cannot_login_verified_user_can():
             }
         )
         assert response.status_code == 403
-        assert response.json()["detail"].startswith("Email not verified")
+        assert response.json()["detail"] == "Please verify your email before logging in."
 
         client.post(
             "/auth/verify-otp",
@@ -1785,7 +1785,7 @@ def test_auth_hardening_and_rate_limiting():
 
     resp6 = client.post("/auth/login", json={"identifier": "unverified_user", "password": "password123"})
     assert resp6.status_code == 403
-    assert "email not verified" in resp6.json()["detail"].lower()
+    assert resp6.json()["detail"] == "Please verify your email before logging in."
 
     # Rate limiting: 5 failed attempts allowed, 6th is blocked
     # Attempt 1 (already done in resp4)
@@ -1867,5 +1867,85 @@ def test_account_deletion_flow():
     # 6. Authenticated requests from deleted user fail with 401
     resp_profile = client.get("/users/me", headers=headers)
     assert resp_profile.status_code == 401
+
+
+def test_cleanup_expired_unverified_users_during_signup(mock_send_email):
+    from datetime import datetime, timedelta
+    # 1. Create one expired unverified user (created 25 hours ago)
+    # 2. Create one active unverified user (created 1 hour ago)
+    # 3. Create one expired verified user (created 25 hours ago)
+    db = TestingSessionLocal()
+    try:
+        now = datetime.utcnow()
+        
+        expired_unverified = User(
+            username="expired_unverified",
+            email="exp_unverified@example.com",
+            password_hash=hash_password("password123"),
+            full_name="Expired Unverified",
+            role="athlete",
+            email_verified=False,
+            created_at=now - timedelta(hours=25),
+        )
+        
+        active_unverified = User(
+            username="active_unverified",
+            email="act_unverified@example.com",
+            password_hash=hash_password("password123"),
+            full_name="Active Unverified",
+            role="athlete",
+            email_verified=False,
+            created_at=now - timedelta(hours=1),
+        )
+        
+        expired_verified = User(
+            username="expired_verified",
+            email="exp_verified@example.com",
+            password_hash=hash_password("password123"),
+            full_name="Expired Verified",
+            role="athlete",
+            email_verified=True,
+            created_at=now - timedelta(hours=25),
+        )
+        
+        db.add_all([expired_unverified, active_unverified, expired_verified])
+        db.commit()
+    finally:
+        db.close()
+
+    # 4. Trigger signup with the expired unverified username.
+    # It should succeed because signup cleans up expired unverified users first,
+    # freeing up the username "expired_unverified" and email "exp_unverified@example.com".
+    response = client.post(
+        "/auth/signup",
+        json={
+            "username": "expired_unverified",
+            "email": "exp_unverified@example.com",
+            "password": "newpassword123",
+            "full_name": "New Signup",
+            "role": "athlete"
+        }
+    )
+    assert response.status_code == 201
+
+    # 5. Verify the DB state
+    db = TestingSessionLocal()
+    try:
+        # Expired unverified user should have been deleted (and replaced by the new one)
+        new_user = db.scalar(select(User).where(User.username == "expired_unverified"))
+        assert new_user is not None
+        assert new_user.email == "exp_unverified@example.com"
+        assert new_user.email_verified is False
+        
+        # Active unverified user should NOT have been deleted
+        act_user = db.scalar(select(User).where(User.username == "active_unverified"))
+        assert act_user is not None
+        
+        # Expired verified user should NOT have been deleted
+        exp_ver_user = db.scalar(select(User).where(User.username == "expired_verified"))
+        assert exp_ver_user is not None
+    finally:
+        db.close()
+
 
 
