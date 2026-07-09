@@ -1823,3 +1823,49 @@ def test_auth_hardening_and_rate_limiting():
     attempt_cleared = db.scalar(select(LoginAttempt).where(LoginAttempt.identifier == "hardened_user"))
     assert attempt_cleared is None
     db.close()
+
+
+def test_account_deletion_flow():
+    # 1. Create a user
+    user, token = create_test_user("delete_test_user")
+
+    # 2. Unauthenticated delete returns 401
+    resp_unauth = client.request("DELETE", "/auth/me", json={"password": "password123"})
+    assert resp_unauth.status_code == 401
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 2.5. Authenticated delete with wrong password returns 400
+    resp_wrong_pw = client.request("DELETE", "/auth/me", headers=headers, json={"password": "wrong_password"})
+    assert resp_wrong_pw.status_code == 400
+    assert "incorrect password" in resp_wrong_pw.json()["detail"].lower()
+
+    # 3. Authenticated delete with correct password succeeds
+    resp_delete = client.request("DELETE", "/auth/me", headers=headers, json={"password": "password123"})
+    assert resp_delete.status_code == 200
+    assert "deleted successfully" in resp_delete.json()["message"].lower()
+
+    # 4. Check DB state: username and email must NOT be anonymized
+    db = TestingSessionLocal()
+    try:
+        updated_user = db.get(User, user.id)
+        assert updated_user.is_active is False
+        assert updated_user.deleted_at is not None
+        assert updated_user.email == user.email
+        assert updated_user.username == user.username
+    finally:
+        db.close()
+
+    # 5. Deleted user cannot login
+    resp_login = client.post(
+        "/auth/login",
+        json={"identifier": "delete_test_user", "password": "password123"}
+    )
+    assert resp_login.status_code == 401
+    assert "invalid email/username or password" in resp_login.json()["detail"].lower()
+
+    # 6. Authenticated requests from deleted user fail with 401
+    resp_profile = client.get("/users/me", headers=headers)
+    assert resp_profile.status_code == 401
+
+

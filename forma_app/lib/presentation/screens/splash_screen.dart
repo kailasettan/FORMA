@@ -105,7 +105,7 @@ class _SplashScreenState extends State<SplashScreen>
                     child: Opacity(
                       opacity: _textOpacity.value,
                       child: Text(
-                        'FORMA',
+                        Branding.appName.toUpperCase(),
                         textAlign: TextAlign.center,
                         style: textStyle,
                       ),

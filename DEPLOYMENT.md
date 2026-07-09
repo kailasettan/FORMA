@@ -1,4 +1,4 @@
-# Forma Backend Deployment
+# Getsa Backend Deployment
 
 This deployment keeps FastAPI and Postgres on one small DigitalOcean droplet via Docker Compose.
 

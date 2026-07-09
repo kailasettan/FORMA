@@ -120,13 +120,18 @@ class ApiClient {
     }
   }
 
-  Future<dynamic> delete(String path, {bool authenticated = true}) async {
+  Future<dynamic> delete(
+    String path, {
+    dynamic body,
+    bool authenticated = true,
+  }) async {
     final uri = _uri(path);
     try {
       final headers = await _getHeaders(authenticated: authenticated);
+      final encodedBody = body != null ? jsonEncode(body) : null;
 
       final response = await _client
-          .delete(uri, headers: headers)
+          .delete(uri, headers: headers, body: encodedBody)
           .timeout(const Duration(seconds: 15));
 
       _debugLogResponse('DELETE', uri, response.statusCode);
@@ -145,11 +150,11 @@ class ApiClient {
     final detail = error.toString();
     if (error is TimeoutException) {
       return NetworkException(
-        'Unable to reach FORMA (Connection timed out). Check your internet connection.',
+        'Unable to reach Getsa (Connection timed out). Check your internet connection.',
       );
     }
     return NetworkException(
-      'Unable to reach FORMA ($detail). Check your internet connection.',
+      'Unable to reach Getsa ($detail). Check your internet connection.',
     );
   }
 

@@ -30,4 +30,5 @@ abstract class AuthRepository {
     required String newPassword,
     required String confirmPassword,
   });
+  Future<void> deleteAccount({required String password});
 }

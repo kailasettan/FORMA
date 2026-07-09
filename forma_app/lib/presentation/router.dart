@@ -8,6 +8,9 @@ import 'screens/dashboard_screen.dart';
 import 'screens/profile/profile_form_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/stats/match_stat_form_screen.dart';
+import 'screens/legal/privacy_screen.dart';
+import 'screens/legal/terms_screen.dart';
+import 'screens/legal/delete_account_screen.dart';
 import '../domain/entities/player_profile.dart';
 
 class AppRouter {
@@ -20,6 +23,9 @@ class AppRouter {
   static const String otpVerification = '/otp-verification';
   static const String forgotPassword = '/forgot-password';
   static const String resetPassword = '/reset-password';
+  static const String privacy = '/privacy';
+  static const String terms = '/terms';
+  static const String deleteAccount = '/delete-account';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -71,6 +77,21 @@ class AppRouter {
           settings: settings,
           builder: (_) => OtpScreen(email: email),
         );
+      case privacy:
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const PrivacyScreen(),
+        );
+      case terms:
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const TermsScreen(),
+        );
+      case deleteAccount:
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const DeleteAccountScreen(),
+        );
       default:
         return MaterialPageRoute(
           settings: settings,
@@ -80,3 +101,4 @@ class AppRouter {
     }
   }
 }
+

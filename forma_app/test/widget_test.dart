@@ -181,6 +181,15 @@ class FakeAuthRepository implements AuthRepository {
     lastNewPassword = newPassword;
     lastConfirmPassword = confirmPassword;
   }
+
+  bool deleteAccountCalled = false;
+  String? lastDeleteAccountPassword;
+
+  @override
+  Future<void> deleteAccount({required String password}) async {
+    deleteAccountCalled = true;
+    lastDeleteAccountPassword = password;
+  }
 }
 
 class FakeProfileRepository implements ProfileRepository {
@@ -412,7 +421,7 @@ class FakeScoutRepository implements ScoutRepository {
 }
 
 void main() {
-  testWidgets('renders FORMA login shell on startup when unauthenticated', (
+  testWidgets('renders GETSA login shell on startup when unauthenticated', (
     WidgetTester tester,
   ) async {
     final authRepo = FakeAuthRepository();
@@ -423,7 +432,7 @@ void main() {
     final scoutRepo = FakeScoutRepository();
 
     await tester.pumpWidget(
-      FormaApp(
+      GetsaApp(
         apiClient: ApiClient(),
         authRepository: authRepo,
         profileRepository: profileRepo,
@@ -434,12 +443,12 @@ void main() {
       ),
     );
 
-    expect(find.text('FORMA'), findsOneWidget);
+    expect(find.text('GETSA'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
 
     await tester.pumpAndSettle();
 
-    expect(find.text('FORMA'), findsOneWidget);
+    expect(find.text('GETSA'), findsOneWidget);
   });
 
   testWidgets('signup screen hides Athlete and Scout role choices', (
@@ -798,7 +807,7 @@ void main() {
       final scoutRepo = FakeScoutRepository();
 
       await tester.pumpWidget(
-        FormaApp(
+        GetsaApp(
           apiClient: ApiClient(),
           authRepository: authRepo,
           profileRepository: profileRepo,
@@ -1045,7 +1054,7 @@ void main() {
     final apiClient = ApiClient();
 
     await tester.pumpWidget(
-      FormaApp(
+      GetsaApp(
         apiClient: apiClient,
         authRepository: authRepo,
         profileRepository: profileRepo,
@@ -1230,7 +1239,7 @@ void main() {
     final scoutRepo = FakeScoutRepository();
 
     await tester.pumpWidget(
-      FormaApp(
+      GetsaApp(
         apiClient: ApiClient(),
         authRepository: authRepo,
         profileRepository: profileRepo,
@@ -1269,7 +1278,7 @@ void main() {
     final scoutRepo = FakeScoutRepository();
 
     await tester.pumpWidget(
-      FormaApp(
+      GetsaApp(
         apiClient: ApiClient(),
         authRepository: authRepo,
         profileRepository: profileRepo,
@@ -1439,5 +1448,121 @@ void main() {
     await authCubit.close();
     await dropFeedCubit.close();
     await catalogCubit.close();
+  });
+
+  testWidgets('SettingsScreen delete account flow double confirmation', (
+    WidgetTester tester,
+  ) async {
+    final authRepo = FakeAuthRepository();
+    final authCubit = AuthCubit(authRepo);
+    final themeCubit = ThemeCubit(secureStorage: FakeSecureStorage());
+
+    await tester.pumpWidget(
+      MultiBlocProvider(
+        providers: [
+          BlocProvider<AuthCubit>.value(value: authCubit),
+          BlocProvider<ThemeCubit>.value(value: themeCubit),
+        ],
+        child: const MaterialApp(home: SettingsScreen()),
+      ),
+    );
+    await tester.pump();
+
+    // Verify Delete Account button is visible
+    expect(find.text('Delete Account'), findsOneWidget);
+
+    // Tap Delete Account
+    await tester.tap(find.text('Delete Account'));
+    await tester.pumpAndSettle();
+
+    // Verify first dialog is shown
+    expect(find.text('Delete account?'), findsOneWidget);
+    expect(
+      find.text(
+        'This will permanently remove your access to Getsa and hide your profile. This action cannot be undone.',
+      ),
+      findsOneWidget,
+    );
+
+    // Tap Cancel in first dialog
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete account?'), findsNothing);
+    expect(authRepo.deleteAccountCalled, isFalse);
+
+    // Tap Delete Account again to trigger second flow
+    await tester.tap(find.text('Delete Account'));
+    await tester.pumpAndSettle();
+
+    // Tap Continue in first dialog
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    // Verify second dialog is shown
+    expect(find.text('Are you absolutely sure?'), findsOneWidget);
+    expect(
+      find.text(
+        'Your account will be disabled, your profile will be hidden, and you will be logged out.',
+      ),
+      findsOneWidget,
+    );
+
+    // Tap Cancel in second dialog
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Are you absolutely sure?'), findsNothing);
+    expect(authRepo.deleteAccountCalled, isFalse);
+
+    // Tap Delete Account, Continue, then confirm in second dialog to open password confirmation dialog
+    await tester.tap(find.text('Delete Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.text('Delete Account').last,
+    ); // The action button in the second dialog is 'Delete Account'
+    await tester.pumpAndSettle();
+
+    // Verify third dialog "Confirm Password" is shown
+    expect(find.text('Confirm Password'), findsOneWidget);
+    expect(
+      find.text('Enter your password to verify account deletion.'),
+      findsOneWidget,
+    );
+
+    // Enter password and test cancel first
+    await tester.enterText(find.byType(TextField), 'password123');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Confirm Password'), findsNothing);
+    expect(authRepo.deleteAccountCalled, isFalse);
+
+    // Open it again to perform successful deletion
+    await tester.tap(find.text('Delete Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete Account').last);
+    await tester.pumpAndSettle();
+
+    // Enter password
+    await tester.enterText(find.byType(TextField), 'password123');
+
+    // Test toggle visibility
+    expect(find.byIcon(Icons.visibility_off_outlined), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.visibility_off_outlined));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+
+    // Tap Confirm to delete
+    await tester.tap(find.text('Confirm'));
+    await tester.pump();
+
+    // Verify deleteAccountCalled is true and password is passed correctly
+    expect(authRepo.deleteAccountCalled, isTrue);
+    expect(authRepo.lastDeleteAccountPassword, 'password123');
+
+    await authCubit.close();
+    await themeCubit.close();
   });
 }

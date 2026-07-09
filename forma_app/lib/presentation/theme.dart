@@ -9,7 +9,7 @@ class AppTheme {
   static const Color lightSurface = Color(0xFFFFFFFF);
   static const Color lightCardBg = Color(0xFFFFFFFF);
 
-  static const Color primary = Color(0xFFFF5E3A); // Forma Orange
+  static const Color primary = Color(0xFFFF5E3A); // Getsa Orange
   static const Color secondary = Color(0xFF3B82F6); // Royal Blue
   static const Color accent = Color(0xFFFFC043); // Gold Accent
 
@@ -276,4 +276,11 @@ class AppTheme {
       ),
     );
   }
+}
+
+class Branding {
+  static const String appName = 'Getsa';
+  static const String appFullForm = 'Get Every Talent Seen Anywhere';
+  static const String appTagline = 'Hidden talent deserves a stage.';
+  static const String appDescription = 'Getsa helps athletes, creators, coaches, communities, and rising talent get seen.';
 }

@@ -187,7 +187,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ];
 
     return Scaffold(
-      appBar: _currentIndex == 0 ? null : AppBar(title: const Text('FORMA')),
+      appBar: _currentIndex == 0 ? null : AppBar(title: Text(Branding.appName.toUpperCase())),
       body: BlocListener<AuthCubit, AuthState>(
         listener: (context, state) {
           if (state is AuthUnauthenticated) {

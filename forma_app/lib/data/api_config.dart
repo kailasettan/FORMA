@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 class ApiConfig {
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://forma-app.up.railway.app',
+    defaultValue: 'https://api.nadhalabs.com',
   );
 
   static String get baseUrl =>

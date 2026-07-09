@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delete Account - GETSA</title>
+  <style>
+    :root {
+      --background: #0B0F19;
+      --surface: #111827;
+      --card-bg: #1F2937;
+      --primary: #FF5E3A;
+      --text-primary: #F3F4F6;
+      --text-secondary: #9CA3AF;
+      --border: #374151;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+ 
+    body {
+      background-color: var(--background);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      padding: 2rem 1rem;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+    }
+ 
+    .container {
+      max-width: 800px;
+      width: 100%;
+    }
+ 
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+ 
+    .logo-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+ 
+    .logo-text {
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-primary);
+    }
+ 
+    .title {
+      font-size: 2.25rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+    }
+ 
+    .last-updated {
+      color: var(--text-secondary);
+      font-style: italic;
+      font-size: 0.95rem;
+    }
+ 
+    .card {
+      background-color: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2.5rem;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+    }
+ 
+    h2 {
+      color: var(--primary);
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
+    }
+ 
+    h2:first-of-type {
+      margin-top: 0;
+    }
+ 
+    p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+      font-size: 1.05rem;
+    }
+ 
+    ul {
+      margin-bottom: 1.5rem;
+      padding-left: 1.5rem;
+    }
+ 
+    li {
+      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+      font-size: 1.05rem;
+    }
+ 
+    footer {
+      text-align: center;
+      margin-top: 3rem;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+ 
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+ 
+    footer a:hover {
+      text-decoration: underline;
+    }
+ 
+    @media (max-width: 640px) {
+      body {
+        padding: 1rem 0.5rem;
+      }
+      .card {
+        padding: 1.5rem;
+        border-radius: 12px;
+      }
+      .title {
+        font-size: 1.75rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-container">
+        <span class="logo-text">GETSA</span>
+      </div>
+      <h1 class="title">Delete Account</h1>
+      <div class="last-updated">Last Updated: July 9, 2026</div>
+    </header>
+ 
+    <div class="card">
+      <h2>Delete Your GETSA Account</h2>
+      <p>We are sorry to see you go. If you decide to delete your GETSA account, please read the instructions below to understand the process and what happens to your data.</p>
+      <p>This deletion is permanent and cannot be undone.</p>
+ 
+      <h2>How to Delete Your Account</h2>
+      <p>You can request account deletion in one of two ways:</p>
+      <ul>
+        <li>
+          <strong>In the GETSA Mobile Application:</strong><br>
+          Navigate to: Profile &rarr; Settings (Gear icon) &rarr; Delete Account &rarr; Confirm with your password.
+        </li>
+        <li style="margin-top: 1rem;">
+          <strong>Request via Email:</strong><br>
+          Send an email to <a href="mailto:nadhalabs@gmail.com" style="color: var(--primary); text-decoration: none;">nadhalabs@gmail.com</a> from the registered email address associated with your GETSA account, with the subject line <strong>"Delete my GETSA account"</strong>.
+        </li>
+      </ul>
+ 
+      <h2>What Happens to Your Data?</h2>
+      <p>Once your account deletion request is processed, the following information will be permanently deleted or anonymized:</p>
+      <ul>
+        <li>Your account profile (first name, last name, username, and bio)</li>
+        <li>Your username/email association</li>
+        <li>Your uploaded drops, photos, and video media</li>
+        <li>Your comments, reactions (fires/likes), and followers/following data</li>
+      </ul>
+ 
+      <h2>Data Retention Policy</h2>
+      <p>Please note that some limited records may be retained in our secure backups for a transitional period if required for compliance with legal obligations, platform security, abuse prevention, or backup recovery purposes. Once these retention obligations expire, the data is completely expunged.</p>
+ 
+      <h2>Contact Us</h2>
+      <p>If you have any difficulties deleting your account or have questions about your data deletion, please reach out to us at:</p>
+      <p>
+        <strong>Developer:</strong> Nadha Labs<br>
+        <strong>Email:</strong> <a href="mailto:nadhalabs@gmail.com" style="color: var(--primary); text-decoration: none;">nadhalabs@gmail.com</a>
+      </p>
+    </div>
+ 
+    <footer>
+      <p>&copy; 2026 Nadha Labs. All rights reserved.</p>
+    </footer>
+  </div>
+</body>
+</html>

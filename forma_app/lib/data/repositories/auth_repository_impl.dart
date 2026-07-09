@@ -146,4 +146,10 @@ class AuthRepositoryImpl implements AuthRepository {
       authenticated: false,
     );
   }
+
+  @override
+  Future<void> deleteAccount({required String password}) async {
+    await _apiClient.delete('/auth/me', body: {'password': password});
+    await logout();
+  }
 }

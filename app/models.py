@@ -52,6 +52,9 @@ class User(Base):
         PG_UUID(as_uuid=True), ForeignKey("sports.id", ondelete="SET NULL"), nullable=True
     )
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
 
     player_profiles: Mapped[list["PlayerProfile"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

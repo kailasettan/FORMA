@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models import User, EmailOTP, LoginAttempt
-from app.schemas import AuthOut, ForgotPasswordIn, LoginIn, ResetPasswordIn, SignUpIn, VerifyOTPIn, ResendOTPIn
+from app.schemas import AuthOut, ForgotPasswordIn, LoginIn, ResetPasswordIn, SignUpIn, VerifyOTPIn, ResendOTPIn, DeleteAccountIn
 from app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -59,7 +60,7 @@ def send_otp_email(
     otp: str,
     *,
     purpose: str = EMAIL_VERIFICATION_PURPOSE,
-    subject: str = "Your FORMA Verification Code",
+    subject: str = "Your GETSA Verification Code",
 ) -> None:
     api_key = settings.resend_api_key
     from_email = settings.from_email
@@ -70,14 +71,14 @@ def send_otp_email(
         "Authorization": f"Bearer {api_key}",
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "FORMA/1.0 (https://forma-app.up.railway.app)",
+        "User-Agent": "GETSA/1.0 (https://api.nadhalabs.com)",
     }
     payload = {
         "from": f"{from_name} <{from_email}>",
         "to": [email],
         "subject": subject,
         "html": f"<p>Your verification code is <strong>{otp}</strong>. It will expire in 10 minutes.</p>",
-        "text": f"Your FORMA verification code is {otp}. It will expire in 10 minutes.",
+        "text": f"Your GETSA verification code is {otp}. It will expire in 10 minutes.",
     }
 
     logger.warning("Resend send helper called")
@@ -280,7 +281,7 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> AuthOut:
     else:
         user = db.scalar(select(User).where(User.username == identifier))
 
-    if user is None or not verify_password(payload.password, user.password_hash):
+    if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
         # Record failed attempt
         if attempt_entry:
             # If the last attempt was more than 15 minutes ago, reset the count to 1
@@ -442,7 +443,7 @@ def forgot_password(payload: ForgotPasswordIn, db: Session = Depends(get_db)):
                 user.email,
                 otp,
                 purpose=PASSWORD_RESET_PURPOSE,
-                subject="Your FORMA Password Reset Code",
+                subject="Your GETSA Password Reset Code",
             )
         except HTTPException:
             pass
@@ -481,7 +482,7 @@ def resend_password_reset_otp(payload: ForgotPasswordIn, db: Session = Depends(g
             user.email,
             otp,
             purpose=PASSWORD_RESET_PURPOSE,
-            subject="Your FORMA Password Reset Code",
+            subject="Your GETSA Password Reset Code",
         )
     except HTTPException:
         pass
@@ -527,3 +528,22 @@ def reset_password(payload: ResetPasswordIn, db: Session = Depends(get_db)):
     db.delete(otp_entry)
     db.commit()
     return {"message": "Password reset successfully."}
+
+
+@router.delete("/me")
+def delete_me(
+    payload: DeleteAccountIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect password.",
+        )
+    current_user.deleted_at = datetime.utcnow()
+    current_user.is_active = False
+    db.commit()
+    return {"message": "Account deleted successfully."}
+
+

@@ -186,6 +186,9 @@ class FakeAuthRepository implements AuthRepository {
     required String newPassword,
     required String confirmPassword,
   }) async {}
+
+  @override
+  Future<void> deleteAccount({required String password}) async {}
 }
 
 void main() {

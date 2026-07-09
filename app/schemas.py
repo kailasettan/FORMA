@@ -92,6 +92,10 @@ class LoginIn(BaseModel):
     password: str
 
 
+class DeleteAccountIn(BaseModel):
+    password: str
+
+
 class VerifyOTPIn(BaseModel):
     email: EmailStr
     otp: str = Field(min_length=6, max_length=6)

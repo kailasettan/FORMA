@@ -71,10 +71,12 @@ def hydrate_drop(drop: Drop, db: Session, current_user: User | None = None) -> D
 
 
 def visible_drop_query():
-    return select(Drop).where(
+    return select(Drop).join(User).where(
         Drop.visibility == "public",
         Drop.moderation_status == "approved",
+        User.is_active == True,
     )
+
 
 
 def record_orphaned_cloudinary_asset(

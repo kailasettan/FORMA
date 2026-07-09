@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 CORS_ALLOWED_ORIGINS = [
     "https://nadhalabs.com",
     "https://www.nadhalabs.com",
+    "https://getsa.nadhalabs.com",
 ]
 CORS_ALLOWED_ORIGIN_REGEX = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
 CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
@@ -58,7 +59,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Forma API", lifespan=lifespan)
+app = FastAPI(title="Getsa API", lifespan=lifespan)
 
 extra_cors_origins = [
     origin.strip()

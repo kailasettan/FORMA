@@ -128,6 +128,31 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
+  Future<void> deleteAccount(String password) async {
+    final currentState = state;
+    emit(AuthLoading());
+    try {
+      await _authRepository.deleteAccount(password: password);
+      emit(
+        const AuthUnauthenticated(
+          message: 'Your account has been deleted successfully.',
+        ),
+      );
+    } catch (e) {
+      if (currentState is AuthAuthenticated) {
+        emit(
+          AuthAuthenticated(
+            currentState.user,
+            verificationRequired: currentState.verificationRequired,
+          ),
+        );
+      } else {
+        emit(const AuthUnauthenticated());
+      }
+      rethrow;
+    }
+  }
+
   void sessionExpired() {
     _authRepository.logout();
     emit(

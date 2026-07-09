@@ -52,7 +52,7 @@ void main() {
   final scoutRepository = ScoutRepositoryImpl(apiClient);
 
   runApp(
-    FormaApp(
+    GetsaApp(
       apiClient: apiClient,
       authRepository: authRepository,
       profileRepository: profileRepository,
@@ -90,7 +90,7 @@ class ConfigErrorApp extends StatelessWidget {
   }
 }
 
-class FormaApp extends StatelessWidget {
+class GetsaApp extends StatelessWidget {
   final ApiClient apiClient;
   final AuthRepository authRepository;
   final ProfileRepository profileRepository;
@@ -99,7 +99,7 @@ class FormaApp extends StatelessWidget {
   final DropRepository dropRepository;
   final ScoutRepository scoutRepository;
 
-  const FormaApp({
+  const GetsaApp({
     super.key,
     required this.apiClient,
     required this.authRepository,
@@ -171,7 +171,7 @@ class FormaApp extends StatelessWidget {
         child: BlocBuilder<ThemeCubit, ThemeMode>(
           builder: (context, themeMode) {
             return MaterialApp(
-              title: 'FORMA',
+              title: Branding.appName,
               debugShowCheckedModeBanner: false,
               theme: AppTheme.lightTheme,
               darkTheme: AppTheme.darkTheme,
@@ -218,7 +218,15 @@ class _AuthGateState extends State<AuthGate> {
     return BlocConsumer<AuthCubit, AuthState>(
       listener: (context, state) {
         if (state is AuthUnauthenticated) {
-          Navigator.of(context).popUntil((route) => route.isFirst);
+          Navigator.of(context).popUntil((route) {
+            final routeName = route.settings.name;
+            if (routeName == AppRouter.privacy ||
+                routeName == AppRouter.terms ||
+                routeName == AppRouter.deleteAccount) {
+              return true;
+            }
+            return route.isFirst;
+          });
         }
       },
       builder: (context, state) {

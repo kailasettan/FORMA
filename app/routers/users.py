@@ -79,7 +79,10 @@ def search_users(
     # Prefix search, rank exact matches first (case-insensitive)
     stmt = (
         select(User)
-        .where(User.username.ilike(f"{query_str}%"))
+        .where(
+            User.username.ilike(f"{query_str}%"),
+            User.is_active == True
+        )
         .order_by(
             # desc() puts True first. Boolean comparison will be True for exact match.
             desc(func.lower(User.username) == query_str.lower()),
@@ -88,24 +91,27 @@ def search_users(
         .limit(20)
     )
     return list(db.scalars(stmt))
-
-
+ 
+ 
 @router.get("/{user_id}", response_model=UserOut)
 def get_public_user(user_id: UUID, db: Session = Depends(get_db)) -> User:
     user = db.get(User, user_id)
-    if user is None:
+    if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
-
-
+ 
+ 
 @router.get("/{user_id}/player-profiles", response_model=list[PlayerProfileOut])
 def list_player_profiles(user_id: UUID, db: Session = Depends(get_db)) -> list[PlayerProfile]:
+    user = db.get(User, user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     profiles = list(db.scalars(select(PlayerProfile).where(PlayerProfile.user_id == user_id)))
     for p in profiles:
         p.sport = db.get(SportCatalog, p.sport_id)
     return profiles
-
-
+ 
+ 
 @router.get("/{user_id}/drops", response_model=list[DropOut])
 def list_user_drops(
     user_id: UUID,
@@ -115,8 +121,9 @@ def list_user_drops(
     db: Session = Depends(get_db),
 ) -> list[Drop]:
     user = db.get(User, user_id)
-    if user is None:
+    if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
 
     page_size = max(1, min(limit, 50))
     query = select(Drop).where(

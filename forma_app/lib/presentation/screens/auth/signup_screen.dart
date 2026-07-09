@@ -131,10 +131,10 @@ class _SignupScreenState extends State<SignupScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      'Join FORMA',
+                    Text(
+                      'Join ${Branding.appName}',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
                         color: AppTheme.primary,
@@ -142,7 +142,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Connect to the server and track your athletic stats.',
+                      Branding.appDescription,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,

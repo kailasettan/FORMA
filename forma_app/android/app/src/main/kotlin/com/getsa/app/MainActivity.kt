@@ -1,4 +1,4 @@
-package com.forma.forma
+package com.getsa.app
 
 import io.flutter.embedding.android.FlutterActivity
 

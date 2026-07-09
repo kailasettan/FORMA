@@ -38,6 +38,7 @@ def get_current_user(
         raise _auth_error() from None
 
     user = db.get(User, user_id)
-    if user is None:
+    if user is None or not user.is_active:
         raise _auth_error()
     return user
+

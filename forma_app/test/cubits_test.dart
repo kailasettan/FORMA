@@ -98,6 +98,13 @@ class FakeAuthRepository implements AuthRepository {
   }) async {
     if (shouldThrow) throw Exception('Reset failed');
   }
+
+  @override
+  Future<void> deleteAccount({required String password}) async {
+    if (shouldThrow) throw Exception('Delete failed');
+    mockUser = null;
+    savedToken = null;
+  }
 }
 
 class FakeDropRepository implements DropRepository {
